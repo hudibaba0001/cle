@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 
 export default function QuoteDebug() {
-  const [json, setJson] = useState<any>(null);
+  const [json, setJson] = useState<object | null>(null);
   const [loading, setLoading] = useState(false);
   async function run() {
     setLoading(true);

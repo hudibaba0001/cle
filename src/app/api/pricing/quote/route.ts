@@ -81,10 +81,11 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(quote, { status: 200, headers: idem ? { "Idempotency-Key": idem } : undefined });
-  } catch (e: any) {
+  } catch (e: unknown) {
     const durationMs = Date.now() - t0;
-    log("pricing.quote.error", { message: e?.message, durationMs });
-    const status = Number.isInteger(e?.status) ? e.status as number : 500;
+    const error = e as Error;
+    log("pricing.quote.error", { message: error?.message, durationMs });
+    const status = Number.isInteger((e as { status?: number })?.status) ? (e as { status: number }).status : 500;
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status });
   }
 }
