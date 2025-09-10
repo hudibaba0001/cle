@@ -1,0 +1,183 @@
+name: pricing-v2-proof
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "app/**"
+      - "pages/**"
+      - "src/**"
+      - "scripts/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/pricing-v2-proof.yml"
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    env:
+      HOST_URL: http://localhost:3000
+      TENANT_ID: demo-tenant
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: |
+          set -e
+          if [ -f pnpm-lock.yaml ]; then
+            corepack enable
+            pnpm i --frozen-lockfile
+            echo "PKG=pnpm" >> $GITHUB_ENV
+          else
+            if [ -f package-lock.json ]; then
+              npm ci
+            else
+              npm install
+            fi
+            echo "PKG=npm" >> $GITHUB_ENV
+          fi
+
+      - name: Build
+        run: |
+          if [ "$PKG" = "pnpm" ]; then pnpm build; else npm run build; fi
+
+      - name: Start server
+        run: |
+          set -e
+          if [ "$PKG" = "pnpm" ]; then pnpm start & else npm start & fi
+          echo $! > server.pid
+          sleep 2
+
+      - name: Wait for /api/health
+        run: |
+          set -e
+          for i in {1..60}; do
+            if curl -sf "$HOST_URL/api/health" >/dev/null; then
+              echo "[OK] /api/health reachable"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "[FAIL] /api/health reachable"
+          exit 1
+
+      - name: Bad payload (no tenant)
+        id: bad
+        run: |
+          set -e
+          CODE=$(curl -s -o bad.json -w "%{http_code}" -X POST "$HOST_URL/api/pricing/v2/quote" \
+            -H "Content-Type: application/json" -d '{}')
+          echo "HTTP=$CODE"
+          cat bad.json || true
+          if [ "$CODE" = "400" ] || [ "$CODE" = "401" ] || [ "$CODE" = "422" ]; then
+            echo "[OK] Bad payload rejected (no tenant) Status=$CODE"
+          else
+            echo "[FAIL] Bad payload rejected (no tenant) Status=$CODE"
+            exit 1
+          fi
+
+      - name: Prepare valid payload
+        run: |
+          set -e
+          mkdir -p scripts
+          cat > scripts/payload.valid.json <<'JSON'
+{
+  "tenant": { "currency": "SEK", "vat_rate": 25, "rut_enabled": true },
+  "service": {
+    "model": "universal_multiplier",
+    "name": "Per sqm",
+    "ratePerSqm": 2.5,
+    "frequencyMultipliers": { "one_time": 1.0, "weekly": 1.0, "biweekly": 1.15, "monthly": 1.4 },
+    "vatRate": 25,
+    "rutEligible": true,
+    "addons": [],
+    "fees": [{ "key": "travel", "name": "Travel fee", "amount": 50, "rutEligible": false }],
+    "modifiers": [{
+      "key": "pet",
+      "label": "Pets present",
+      "condition": { "type": "boolean", "when": true, "answerKey": "has_pets" },
+      "effect": { "target": "subtotal_before_modifiers", "mode": "percent", "value": 10, "direction": "increase", "rutEligible": true, "label": "+10% pets" }
+    }],
+    "minimum": 0
+  },
+  "frequency": "monthly",
+  "inputs": { "area": 50 },
+  "addons": [],
+  "applyRUT": true,
+  "coupon": { "code": "SAVE10", "type": "percent", "value": 10 },
+  "answers": { "has_pets": true }
+}
+JSON
+
+      - name: Valid payload (with tenant) → 200 + invariant
+        run: |
+          set -e
+          CODE=$(curl -s -o good.json -w "%{http_code}" -X POST "$HOST_URL/api/pricing/v2/quote" \
+            -H "Content-Type: application/json" -H "x-tenant-id: $TENANT_ID" \
+            --data-binary @scripts/payload.valid.json)
+          echo "HTTP=$CODE"
+          cat good.json | jq . || (echo "Response not JSON" && exit 1)
+          if [ "$CODE" != "200" ]; then
+            echo "[FAIL] Valid payload accepted (with tenant) Status=$CODE"
+            exit 1
+          fi
+          echo "[OK] Valid payload accepted (with tenant) Status=$CODE"
+
+          SUBTOTAL=$(jq -r '.subtotal_ex_vat_minor // .subtotal_minor' good.json)
+          VAT=$(jq -r '.vat_minor' good.json)
+          RUT=$(jq -r '.rut_minor' good.json)
+          DISC=$(jq -r '.discount_minor' good.json)
+          TOTAL=$(jq -r '.total_minor' good.json)
+
+          SUM=$((SUBTOTAL + VAT + RUT + DISC))
+          echo "currency=$(jq -r '.currency' good.json) frequency=$(jq -r '.frequency // empty' scripts/payload.valid.json)"
+          echo "subtotal_ex_vat=$SUBTOTAL vat=$VAT rut=$RUT discount=$DISC total=$TOTAL"
+          echo "lines sample: $(jq -r '.lines[:6] | map("\(.key):\(.rutEligible):\(.amount_minor)") | join(" | ")' good.json)"
+
+          if [ "$TOTAL" -eq "$SUM" ]; then
+            echo "[OK] Arithmetic invariant (total = subtotal_ex_vat + vat + rut + discount)"
+          else
+            echo "[FAIL] Arithmetic invariant mismatch total=$TOTAL sum=$SUM"
+            exit 1
+          fi
+
+          if [ "$RUT" -le 0 ] && [ "$DISC" -le 0 ]; then
+            echo "[OK] Signs: rut<=0 & discount<=0"
+          else
+            echo "[FAIL] Signs wrong rut=$RUT discount=$DISC"
+            exit 1
+          fi
+
+      - name: /debug/rules reachability + green check
+        run: |
+          set -e
+          CODE=$(curl -s -o rules.html -w "%{http_code}" "$HOST_URL/debug/rules")
+          echo "HTTP=$CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "[OK] /debug/rules reachable"
+          else
+            echo "[FAIL] /debug/rules reachable Status=$CODE"
+            exit 1
+          fi
+          if grep -q "❌" rules.html; then
+            echo "[FAIL] Rules fixtures green (found ❌)"
+            exit 1
+          else
+            echo "[OK] Rules fixtures green"
+          fi
+
+      - name: Print bad error body (for records)
+        run: |
+          echo "Bad request JSON body:"
+          cat bad.json || true
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then kill -TERM $(cat server.pid) || true; fi
