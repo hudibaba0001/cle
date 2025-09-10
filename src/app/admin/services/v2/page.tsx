@@ -126,7 +126,7 @@ export default function AdminServicesV2Page() {
           <h2 className="font-semibold">Service</h2>
           <div className="grid grid-cols-2 gap-3">
             <label className="text-sm">Model
-              <select className="w-full border rounded px-2 py-1" value={form.model} onChange={e=>setForm(f=>({ ...f, model: e.target.value as any }))}>
+              <select className="w-full border rounded px-2 py-1" value={form.model} onChange={e=>setForm(f=>({ ...f, model: e.target.value as ServiceForm["model"] }))}>
                 <option value="per_sqm">per_sqm</option>
                 <option value="fixed">fixed</option>
                 <option value="hourly">hourly</option>
@@ -179,7 +179,7 @@ export default function AdminServicesV2Page() {
                     </label>
                     <label className="text-sm">Target
                       <select className="w-full border rounded px-2 py-1" value={m.effect.target} onChange={e=>{
-                        const v=e.target.value as any; setForm(prev=>{ const next=[...prev.modifiers]; next[i]={...m, effect:{...m.effect, target:v}}; return { ...prev, modifiers: next }; });
+                        const v=e.target.value as ModifierRule["effect"]["target"]; setForm(prev=>{ const next=[...prev.modifiers]; next[i]={...m, effect:{...m.effect, target:v}}; return { ...prev, modifiers: next }; });
                       }}>
                         <option value="subtotal_before_modifiers">Subtotal (default)</option>
                         <option value="base_after_frequency">Base after frequency</option>
@@ -189,7 +189,7 @@ export default function AdminServicesV2Page() {
                   <div className="grid grid-cols-4 gap-2">
                     <label className="text-sm">Mode
                       <select className="w-full border rounded px-2 py-1" value={m.effect.mode} onChange={e=>{
-                        const v=e.target.value as any; setForm(prev=>{ const next=[...prev.modifiers]; next[i]={...m, effect:{...m.effect, mode:v}}; return { ...prev, modifiers: next }; });
+                        const v=e.target.value as ModifierRule["effect"]["mode"]; setForm(prev=>{ const next=[...prev.modifiers]; next[i]={...m, effect:{...m.effect, mode:v}}; return { ...prev, modifiers: next }; });
                       }}>
                         <option value="percent">percent</option>
                         <option value="fixed">fixed (SEK)</option>
@@ -202,7 +202,7 @@ export default function AdminServicesV2Page() {
                     </label>
                     <label className="text-sm">Direction
                       <select className="w-full border rounded px-2 py-1" value={m.effect.direction} onChange={e=>{
-                        const v=e.target.value as any; setForm(prev=>{ const next=[...prev.modifiers]; next[i]={...m, effect:{...m.effect, direction:v}}; return { ...prev, modifiers: next }; });
+                        const v=e.target.value as ModifierRule["effect"]["direction"]; setForm(prev=>{ const next=[...prev.modifiers]; next[i]={...m, effect:{...m.effect, direction:v}}; return { ...prev, modifiers: next }; });
                       }}>
                         <option value="increase">increase</option>
                         <option value="decrease">decrease</option>

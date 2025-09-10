@@ -88,7 +88,7 @@ export function computeQuoteV2(req: unknown): QuoteBreakdown {
 
   // Base
   const baseRes = computeBase(service, inputs);
-  let base = baseRes.base;
+  const base = baseRes.base;
 
   // Frequency on base only
   const baseAfterFreq = applyFrequency(base, service.frequencyMultipliers, frequency);
