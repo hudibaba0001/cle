@@ -56,6 +56,7 @@ export default function BookingDetail({ params }: { params: Promise<{ id: string
   
   useEffect(() => { 
     if (resolvedParams) load(); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedParams]);
 
   async function accept() {

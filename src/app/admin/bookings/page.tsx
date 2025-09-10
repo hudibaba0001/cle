@@ -15,8 +15,16 @@ export default function AdminBookings() {
     const j = await r.json();
     setItems(j.items ?? []); setTotal(j.total ?? 0); setPage(j.page ?? p);
   }
-  useEffect(() => { load(1); }, []);
-  useEffect(() => { load(1, status); }, [status]);
+  
+  useEffect(() => { 
+    load(1); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  
+  useEffect(() => { 
+    load(1, status); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   return (
     <div style={{ padding: 24, fontFamily:"ui-sans-serif" }}>
