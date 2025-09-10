@@ -7,7 +7,7 @@ import { computeQuote } from "@/packages/pricing";
 import type { ServiceConfigV1 } from "@/packages/pricing/types";
 
 const dbTenant = z.object({
-  id: z.string().uuid(),
+  id: z.string().length(36).regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
   currency: z.string().min(1),
   vat_rate: z.number(),
   rut_enabled: z.boolean(),
@@ -15,7 +15,7 @@ const dbTenant = z.object({
 });
 
 const dbService = z.object({
-  id: z.string().uuid(),
+  id: z.string().length(36).regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
   model: z.enum(["fixed","hourly","per_sqm","per_room","windows"]),
   schema_version: z.number(),
   config: z.any(),

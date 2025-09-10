@@ -56,9 +56,14 @@ export default function QuoteDebug() {
     <div style={{ padding: 24, fontFamily: "ui-sans-serif" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 style={{ fontSize: 24, margin: 0 }}>Quote Debug</h1>
-        <a href="/admin/services" style={{ color: "#2563eb", textDecoration: "none" }}>
-          → Manage Services
-        </a>
+        <div style={{ display: "flex", gap: 12 }}>
+          <a href="/widget/demo-cleaning" style={{ color: "#2563eb", textDecoration: "none" }}>
+            → Widget Test
+          </a>
+          <a href="/admin/services" style={{ color: "#2563eb", textDecoration: "none" }}>
+            → Manage Services
+          </a>
+        </div>
       </div>
       <div style={{ display: "grid", gap: 12, maxWidth: 460 }}>
         <label>
