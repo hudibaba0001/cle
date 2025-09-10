@@ -1,100 +1,129 @@
 import { z } from "zod";
 
-export const PricingModel = z.enum(["fixed","hourly","per_sqm","per_room","windows"]);
-export type PricingModel = z.infer<typeof PricingModel>;
+/** Frequency surcharges (PDF: weekly 1.00, biweekly 1.15, monthly 1.40) */
+export const FrequencyKey = z.enum(["one_time","weekly","biweekly","monthly"]);
+export type FrequencyKey = z.infer<typeof FrequencyKey>;
+
+export const FrequencyMapSchema = z.object({
+  one_time: z.number().positive().default(1.0),
+  weekly: z.number().positive().default(1.0),
+  biweekly: z.number().positive().default(1.15),
+  monthly: z.number().positive().default(1.40),
+});
 
 export const AddonSchema = z.object({
-  key: z.string(),
-  name: z.string(),
+  key: z.string().min(1),
+  name: z.string().min(1),
   type: z.enum(["fixed","per_unit"]).default("fixed"),
   amount: z.number().nonnegative(),
+  rutEligible: z.boolean().default(false),
 });
 export type Addon = z.infer<typeof AddonSchema>;
 
-export const FrequencyKey = z.enum(["one_time","monthly","biweekly","weekly"]);
-export type FrequencyKey = z.infer<typeof FrequencyKey>;
+export const FeeSchema = z.object({
+  key: z.string().min(1),
+  name: z.string().min(1),
+  amount: z.number().nonnegative(),
+  rutEligible: z.boolean().default(false),
+});
+export type Fee = z.infer<typeof FeeSchema>;
 
-export const FrequencyMapSchema = z.record(z.string(), z.number().positive());
-export type FrequencyMap = z.infer<typeof FrequencyMapSchema>;
-
-/** Dynamic pricing (boolean condition → ±% or ±fixed on base or subtotal) */
+/** Dynamic pricing: boolean → ±% or ±fixed, applies to base-after-frequency or subtotal-before-mods */
 export const ModifierRule = z.object({
-  key: z.string().min(1), // e.g., "has_dog"
-  label: z.string().min(1), // e.g., "Do you have a dog?"
+  key: z.string().min(1),
+  label: z.string().min(1),
   condition: z.object({
     type: z.literal("boolean"),
-    when: z.boolean().default(true), // apply when answer === when
-    answerKey: z.string().min(1), // key in request.answers
+    when: z.boolean().default(true),
+    answerKey: z.string().min(1),
   }),
   effect: z.object({
-    target: z
-      .enum(["base_after_frequency", "subtotal_before_modifiers"])
-      .default("subtotal_before_modifiers"),
-    mode: z.enum(["percent", "fixed"]),
-    value: z.number().positive(), // percent 0-100 (clamped), or fixed in currency units
-    direction: z.enum(["increase", "decrease"]).default("increase"),
+    target: z.enum(["base_after_frequency","subtotal_before_modifiers"]).default("subtotal_before_modifiers"),
+    mode: z.enum(["percent","fixed"]),
+    value: z.number().positive(),
+    direction: z.enum(["increase","decrease"]).default("increase"),
     rutEligible: z.boolean().default(false),
     label: z.string().optional(),
   }),
 });
 export type ModifierRule = z.infer<typeof ModifierRule>;
 
-export const ServiceConfigBase = z.object({
-  model: PricingModel,
+/** Model configs (PDF) */
+const BaseCfg = z.object({
   name: z.string().optional(),
-  minPrice: z.number().nonnegative().optional(),
-  addons: z.array(AddonSchema).optional(),
-  frequencyMultipliers: FrequencyMapSchema.optional(),
-  rutEligible: z.boolean().optional(),
+  frequencyMultipliers: FrequencyMapSchema.default({ one_time:1, weekly:1, biweekly:1.15, monthly:1.4 }),
   vatRate: z.number().min(0).max(100).default(25),
-  // v2 dynamic modifiers
+  rutEligible: z.boolean().default(true),
+  addons: z.array(AddonSchema).default([]),
+  fees: z.array(FeeSchema).default([]),
   modifiers: z.array(ModifierRule).default([]),
-});
-export type ServiceConfigBase = z.infer<typeof ServiceConfigBase>;
-
-export const FixedConfig = ServiceConfigBase.extend({
-  model: z.literal("fixed"),
-  fixedPrice: z.number().nonnegative(),
+  minPrice: z.number().nonnegative().optional(),
 });
 
-export const HourlyConfig = ServiceConfigBase.extend({
-  model: z.literal("hourly"),
-  hourlyRate: z.number().nonnegative(),
-  minimumHours: z.number().nonnegative().optional(),
-});
-
-export const PerSqmConfig = ServiceConfigBase.extend({
-  model: z.literal("per_sqm"),
-  pricePerSqm: z.number().nonnegative(),
-});
-
-export const PerRoomConfig = ServiceConfigBase.extend({
-  model: z.literal("per_room"),
-  roomTypes: z.array(z.object({
-    key: z.string(),
-    name: z.string(),
-    pricePerRoom: z.number().nonnegative(),
-    rutEligible: z.boolean().optional(),
+export const FixedTierConfig = BaseCfg.extend({
+  model: z.literal("fixed_tier"),
+  tiers: z.array(z.object({
+    min: z.number().nonnegative(),
+    max: z.number().positive(),
+    price: z.number().nonnegative(),
   })).min(1),
 });
 
-export const WindowsConfig = ServiceConfigBase.extend({
+export const TieredMultiplierConfig = BaseCfg.extend({
+  model: z.literal("tiered_multiplier"),
+  tiers: z.array(z.object({
+    min: z.number().nonnegative(),
+    max: z.number().positive(),
+    ratePerSqm: z.number().nonnegative(),
+  })).min(1),
+  minimum: z.number().nonnegative().default(0),
+});
+
+export const UniversalMultiplierConfig = BaseCfg.extend({
+  model: z.literal("universal_multiplier"),
+  ratePerSqm: z.number().nonnegative(),
+  minimum: z.number().nonnegative().default(0),
+});
+
+export const WindowsConfig = BaseCfg.extend({
   model: z.literal("windows"),
   windowTypes: z.array(z.object({
-    key: z.string(),
-    name: z.string(),
+    key: z.string().min(1),
+    name: z.string().min(1),
     pricePerUnit: z.number().nonnegative(),
   })).min(1),
+  minimum: z.number().nonnegative().default(0),
+});
+
+export const HourlyAreaConfig = BaseCfg.extend({
+  model: z.literal("hourly_area"),
+  hourlyRate: z.number().nonnegative(),
+  areaToHours: z.array(z.object({
+    min: z.number().nonnegative(),
+    max: z.number().positive(),
+    hours: z.number().positive(),
+  })).min(1),
+  minimum: z.number().nonnegative().default(0),
+});
+
+export const PerRoomConfig = BaseCfg.extend({
+  model: z.literal("per_room"),
+  roomTypes: z.array(z.object({
+    key: z.string().min(1),
+    name: z.string().min(1),
+    pricePerRoom: z.number().nonnegative(),
+  })).min(1),
+  minimum: z.number().nonnegative().default(0),
 });
 
 export const ServiceConfig = z.discriminatedUnion("model", [
-  FixedConfig, HourlyConfig, PerSqmConfig, PerRoomConfig, WindowsConfig
+  FixedTierConfig, TieredMultiplierConfig, UniversalMultiplierConfig,
+  WindowsConfig, HourlyAreaConfig, PerRoomConfig,
 ]);
 export type ServiceConfig = z.infer<typeof ServiceConfig>;
 
 export const QuoteInputs = z.object({
   area: z.number().nonnegative().optional(),
-  hours: z.number().nonnegative().optional(),
   rooms: z.record(z.string(), z.number().int().nonnegative()).optional(),
   windows: z.record(z.string(), z.number().int().nonnegative()).optional(),
 });
@@ -125,7 +154,6 @@ export const QuoteRequestSchema = z.object({
   addons: z.array(QuoteAddonInput).default([]),
   applyRUT: z.boolean().default(false),
   coupon: CouponSchema.optional(),
-  // dynamic answers controlling modifiers
   answers: z.record(z.string(), z.unknown()).default({}),
 });
 export type QuoteRequest = z.infer<typeof QuoteRequestSchema>;
@@ -133,13 +161,14 @@ export type QuoteRequest = z.infer<typeof QuoteRequestSchema>;
 export const QuoteLine = z.object({
   key: z.string(),
   label: z.string(),
+  rutEligible: z.boolean().default(false),
   amount_minor: z.number().int(),
 });
 export type QuoteLine = z.infer<typeof QuoteLine>;
 
 export const QuoteBreakdown = z.object({
   currency: z.string(),
-  model: PricingModel,
+  model: z.string(),
   lines: z.array(QuoteLine),
   subtotal_ex_vat_minor: z.number().int(),
   vat_minor: z.number().int(),

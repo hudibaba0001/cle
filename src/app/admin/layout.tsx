@@ -14,6 +14,7 @@ export default function AdminLayout({
               <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
               <div className="hidden md:flex space-x-6">
                 <Link href="/admin/services" className="text-gray-600 hover:text-blue-600 font-medium">Services</Link>
+                <Link href="/admin/services/v2" className="text-gray-600 hover:text-blue-600 font-medium">Services v2</Link>
                 <Link href="/admin/bookings" className="text-gray-600 hover:text-blue-600 font-medium">Bookings</Link>
                 <a href="/admin/analytics" className="text-gray-400 cursor-not-allowed">Analytics</a>
               </div>
