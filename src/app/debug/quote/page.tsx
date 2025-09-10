@@ -1,15 +1,39 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+
+interface Service {
+  key: string;
+  name: string;
+  model: string;
+  is_active: boolean;
+}
 
 export default function QuoteDebug() {
   const [json, setJson] = useState<object | null>(null);
   const [loading, setLoading] = useState(false);
+  const [services, setServices] = useState<Service[]>([]);
+  const [selectedService, setSelectedService] = useState("basic_cleaning");
+
+  useEffect(() => {
+    // Load available services
+    fetch("/api/admin/services")
+      .then(res => res.json())
+      .then(data => {
+        if (data.items) {
+          setServices(data.items.filter((s: Service) => s.is_active));
+          if (data.items.length > 0) {
+            setSelectedService(data.items[0].key);
+          }
+        }
+      })
+      .catch(console.error);
+  }, []);
   async function run() {
     setLoading(true);
     setJson(null);
     const body = {
       tenantId: "00000000-0000-0000-0000-000000000001",
-      serviceKey: "basic_cleaning",
+      serviceKey: selectedService,
       locale: "sv-SE",
       frequency: "monthly",
       inputs: { sqm: Number((document.getElementById("sqm") as HTMLInputElement).value || 75) },
@@ -30,8 +54,27 @@ export default function QuoteDebug() {
   }
   return (
     <div style={{ padding: 24, fontFamily: "ui-sans-serif" }}>
-      <h1 style={{ fontSize: 24, marginBottom: 16 }}>Quote Debug</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h1 style={{ fontSize: 24, margin: 0 }}>Quote Debug</h1>
+        <a href="/admin/services" style={{ color: "#2563eb", textDecoration: "none" }}>
+          → Manage Services
+        </a>
+      </div>
       <div style={{ display: "grid", gap: 12, maxWidth: 460 }}>
+        <label>
+          Service: 
+          <select 
+            value={selectedService} 
+            onChange={(e) => setSelectedService(e.target.value)}
+            style={{ marginLeft: 8, padding: "4px 8px" }}
+          >
+            {services.map(service => (
+              <option key={service.key} value={service.key}>
+                {service.name} ({service.model})
+              </option>
+            ))}
+          </select>
+        </label>
         <label>Area (sqm): <input id="sqm" type="number" defaultValue={75} /></label>
         <label><input id="addonFridge" type="checkbox" defaultChecked /> Add-on: Fridge clean</label>
         <label><input id="addonWindows" type="checkbox" /> Add-on: Inside windows (qty 3)</label>
