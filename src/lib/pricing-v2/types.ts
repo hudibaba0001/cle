@@ -17,6 +17,28 @@ export type FrequencyKey = z.infer<typeof FrequencyKey>;
 export const FrequencyMapSchema = z.record(z.string(), z.number().positive());
 export type FrequencyMap = z.infer<typeof FrequencyMapSchema>;
 
+/** Dynamic pricing (boolean condition → ±% or ±fixed on base or subtotal) */
+export const ModifierRule = z.object({
+  key: z.string().min(1), // e.g., "has_dog"
+  label: z.string().min(1), // e.g., "Do you have a dog?"
+  condition: z.object({
+    type: z.literal("boolean"),
+    when: z.boolean().default(true), // apply when answer === when
+    answerKey: z.string().min(1), // key in request.answers
+  }),
+  effect: z.object({
+    target: z
+      .enum(["base_after_frequency", "subtotal_before_modifiers"])
+      .default("subtotal_before_modifiers"),
+    mode: z.enum(["percent", "fixed"]),
+    value: z.number().positive(), // percent 0-100 (clamped), or fixed in currency units
+    direction: z.enum(["increase", "decrease"]).default("increase"),
+    rutEligible: z.boolean().default(false),
+    label: z.string().optional(),
+  }),
+});
+export type ModifierRule = z.infer<typeof ModifierRule>;
+
 export const ServiceConfigBase = z.object({
   model: PricingModel,
   name: z.string().optional(),
@@ -25,6 +47,8 @@ export const ServiceConfigBase = z.object({
   frequencyMultipliers: FrequencyMapSchema.optional(),
   rutEligible: z.boolean().optional(),
   vatRate: z.number().min(0).max(100).default(25),
+  // v2 dynamic modifiers
+  modifiers: z.array(ModifierRule).default([]),
 });
 export type ServiceConfigBase = z.infer<typeof ServiceConfigBase>;
 
@@ -101,6 +125,8 @@ export const QuoteRequestSchema = z.object({
   addons: z.array(QuoteAddonInput).default([]),
   applyRUT: z.boolean().default(false),
   coupon: CouponSchema.optional(),
+  // dynamic answers controlling modifiers
+  answers: z.record(z.string(), z.unknown()).default({}),
 });
 export type QuoteRequest = z.infer<typeof QuoteRequestSchema>;
 

@@ -47,25 +47,66 @@ function computeAddons(service: ServiceConfig, addonsIn: QuoteRequest["addons"])
   return total;
 }
 
+function pctClamp(v: number) { return Math.max(0, Math.min(100, v)); }
+
+function evalModifiers(
+  service: ServiceConfig,
+  answers: Record<string, unknown>,
+  ctx: { baseAfterFreq: number; subtotalBeforeModifiers: number }
+): { amount: number; lines: QuoteLine[] } {
+  const lines: QuoteLine[] = [];
+  let total = 0;
+  const rules = (service as any).modifiers as Array<any> | undefined; // modifiers live on base schema
+  if (!rules || !Array.isArray(rules) || !rules.length) return { amount: 0, lines };
+  for (const rule of rules) {
+    if (!rule || rule.condition?.type !== "boolean") continue;
+    const ans = Boolean((answers as any)[rule.condition.answerKey]);
+    const when = rule.condition.when ?? true;
+    if (ans !== when) continue;
+
+    const targetVal = rule.effect?.target === "base_after_frequency"
+      ? ctx.baseAfterFreq
+      : ctx.subtotalBeforeModifiers;
+    let amt = 0;
+    if (rule.effect?.mode === "percent") {
+      amt = targetVal * (pctClamp(Number(rule.effect.value) || 0) / 100);
+    } else if (rule.effect?.mode === "fixed") {
+      amt = Number(rule.effect.value) || 0;
+    }
+    if (rule.effect?.direction === "decrease") amt = -amt;
+    if (!amt) continue;
+    total += amt;
+    const label = rule.effect?.label || rule.label || "Modifier";
+    lines.push({ key: `modifier:${rule.key}`, label, amount_minor: toMinor(amt) });
+  }
+  return { amount: total, lines };
+}
+
 export function computeQuoteV2(req: unknown): QuoteBreakdown {
   const parsed = QuoteRequestSchema.parse(req);
-  const { tenant, service, inputs, addons, frequency, applyRUT, coupon } = parsed;
+  const { tenant, service, inputs, addons, frequency, applyRUT, coupon, answers } = parsed;
 
   // Base
   const baseRes = computeBase(service, inputs);
   let base = baseRes.base;
 
   // Frequency on base only
-  base = applyFrequency(base, service.frequencyMultipliers, frequency);
+  const baseAfterFreq = applyFrequency(base, service.frequencyMultipliers, frequency);
 
   // Min price guard (only if some base was selected)
-  if (service.minPrice && base > 0 && base < service.minPrice) base = service.minPrice;
+  let baseGuarded = baseAfterFreq;
+  if (service.minPrice && baseGuarded > 0 && baseGuarded < service.minPrice) baseGuarded = service.minPrice;
 
   // Add-ons (not multiplied)
   const addonsTotal = computeAddons(service, addons);
 
+  // Modifiers (pre-VAT/RUT)
+  const subtotalBeforeModifiers = baseGuarded + addonsTotal;
+  const modEval = evalModifiers(service, answers ?? {}, { baseAfterFreq: baseGuarded, subtotalBeforeModifiers });
+  const modifiersTotal = modEval.amount;
+
   // Subtotal ex VAT
-  const subtotal = base + addonsTotal;
+  const subtotal = subtotalBeforeModifiers + modifiersTotal;
 
   // VAT
   const vatRate = (service.vatRate ?? tenant.vat_rate ?? 25) / 100;
@@ -93,8 +134,9 @@ export function computeQuoteV2(req: unknown): QuoteBreakdown {
   const total = preDiscountTotal - discount;
 
   // Lines
-  const lines: QuoteLine[] = [{ key: "base", label: "Base", amount_minor: toMinor(base) }];
+  const lines: QuoteLine[] = [{ key: "base", label: "Base (after frequency)", amount_minor: toMinor(baseGuarded) }];
   if (addonsTotal > 0) lines.push({ key: "addons", label: "Add-ons", amount_minor: toMinor(addonsTotal) });
+  if (modEval.lines.length) lines.push(...modEval.lines);
   lines.push({ key: "vat", label: "VAT", amount_minor: toMinor(vat) });
   if (rutEligible) lines.push({ key: "rut", label: "RUT deduction", amount_minor: -toMinor(rut) });
   if (discount > 0) lines.push({ key: "discount", label: "Discount", amount_minor: -toMinor(discount) });
@@ -103,7 +145,7 @@ export function computeQuoteV2(req: unknown): QuoteBreakdown {
     currency: tenant.currency ?? "SEK",
     model: service.model,
     lines,
-    subtotal_ex_vat_minor: toMinor(subtotal),
+  subtotal_ex_vat_minor: toMinor(subtotal),
     vat_minor: toMinor(vat),
     rut_minor: -toMinor(rut),
     discount_minor: -toMinor(discount),

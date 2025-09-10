@@ -16,7 +16,8 @@ const Req = z.object({
   inputs: z.any().default({}),
   addons: z.array(z.object({ key: z.string(), quantity: z.number().int().positive().optional() })).default([]),
   applyRUT: z.boolean().default(false),
-  coupon: Coupon
+  coupon: Coupon,
+  answers: z.record(z.string(), z.unknown()).default({})
 });
 
 export async function POST(req: NextRequest) {
