@@ -10,7 +10,7 @@ export const AddonSelection = z.object({
 export type AddonSelection = z.infer<typeof AddonSelection>;
 
 export const QuoteRequestSchema = z.object({
-  tenantId: z.string().uuid(),
+  tenantId: z.string().length(36).regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
   serviceKey: z.string().min(1),
   locale: z.enum(["sv-SE","en-US"]).default("sv-SE"),
   frequency: Frequency,

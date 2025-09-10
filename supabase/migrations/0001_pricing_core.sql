@@ -48,12 +48,12 @@ create policy services_deny_all on public.services for all using (false);
 
 -- Dev seed (demo tenant + one service)
 insert into public.tenants (id, name, slug, currency, vat_rate, rut_enabled, is_active)
-values ('00000000-0000-0000-0000-000000000001','Demo Cleaning AB','demo-cleaning','SEK',25.00,true,true)
+values ('8f98ad87-3f30-432d-9b00-f2a7c1c76c63','Demo Cleaning AB','demo-cleaning','SEK',25.00,true,true)
 on conflict (slug) do nothing;
 
 insert into public.services (tenant_id, key, name, model, is_public, is_active, config)
 values (
-  '00000000-0000-0000-0000-000000000001',
+  '8f98ad87-3f30-432d-9b00-f2a7c1c76c63',
   'basic_cleaning',
   'Basic Home Cleaning',
   'per_sqm',
