@@ -54,25 +54,38 @@ export default function AdminServicesV2Page() {
     frequency: "monthly"
   });
 
-  const [preview, setPreview] = useState<any | null>(null);
+  type Preview = {
+    currency: string;
+    model: string;
+    lines: Array<{ key: string; label: string; amount_minor: number }>;
+    subtotal_ex_vat_minor: number;
+    vat_minor: number;
+    rut_minor: number;
+    discount_minor: number;
+    total_minor: number;
+  } | null;
+  const [preview, setPreview] = useState<Preview>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function previewQuote() {
     setLoading(true); setError(null);
     try {
-      const service: ServiceConfig = {
+      const base = {
         model: form.model,
         name: form.name,
         minPrice: form.minPrice,
         vatRate: form.vatRate,
         addons: form.addons.map(a => ({ key: a.key, name: a.name, type: a.type ?? "fixed", amount: a.amount })),
         frequencyMultipliers: form.frequencyMultipliers,
-        // @ts-ignore discriminator specific field
-        pricePerSqm: form.pricePerSqm,
-        // @ts-ignore include modifiers on base schema
+        // modifiers live on base schema
         modifiers: form.modifiers,
-      } as unknown as ServiceConfig;
+      } as Partial<ServiceConfig> & { modifiers: ModifierRule[] };
+
+      const service = ({
+        ...base,
+        ...(form.model === "per_sqm" ? { pricePerSqm: form.pricePerSqm } : {}),
+      }) as ServiceConfig;
 
       const res = await fetch("/api/pricing/v2/quote", {
         method: "POST",
@@ -91,8 +104,9 @@ export default function AdminServicesV2Page() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.details || "Failed to preview");
       setPreview(json);
-    } catch (e: any) {
-      setError(e.message || String(e));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -211,10 +225,10 @@ export default function AdminServicesV2Page() {
               }] })) }>+ Add rule</button>
 
               <div className="grid grid-cols-2 gap-3 mt-2">
-                {form.modifiers.map(m => (
+        {form.modifiers.map(m => (
                   <label key={`ans_${m.key}`} className="text-sm flex items-center gap-2">
                     <input type="checkbox" checked={Boolean(form.previewAnswers[m.condition.answerKey])} onChange={e=> setForm(prev=> ({ ...prev, previewAnswers: { ...prev.previewAnswers, [m.condition.answerKey]: e.target.checked } }))} />
-                    Customer answers "Yes" to: {m.label}
+          Customer answers &quot;Yes&quot; to: {m.label}
                   </label>
                 ))}
               </div>

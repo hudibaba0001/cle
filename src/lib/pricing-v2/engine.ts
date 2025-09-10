@@ -56,11 +56,11 @@ function evalModifiers(
 ): { amount: number; lines: QuoteLine[] } {
   const lines: QuoteLine[] = [];
   let total = 0;
-  const rules = (service as any).modifiers as Array<any> | undefined; // modifiers live on base schema
+  const rules = (service as unknown as { modifiers?: Array<{ key: string; label?: string; condition: { type: "boolean"; when?: boolean; answerKey: string }; effect: { target?: "base_after_frequency" | "subtotal_before_modifiers"; mode?: "percent" | "fixed"; value?: number; direction?: "increase" | "decrease"; label?: string } }> }).modifiers;
   if (!rules || !Array.isArray(rules) || !rules.length) return { amount: 0, lines };
   for (const rule of rules) {
     if (!rule || rule.condition?.type !== "boolean") continue;
-    const ans = Boolean((answers as any)[rule.condition.answerKey]);
+    const ans = Boolean((answers as Record<string, unknown>)[rule.condition.answerKey]);
     const when = rule.condition.when ?? true;
     if (ans !== when) continue;
 
@@ -76,7 +76,7 @@ function evalModifiers(
     if (rule.effect?.direction === "decrease") amt = -amt;
     if (!amt) continue;
     total += amt;
-    const label = rule.effect?.label || rule.label || "Modifier";
+  const label = rule.effect?.label || rule.label || "Modifier";
     lines.push({ key: `modifier:${rule.key}`, label, amount_minor: toMinor(amt) });
   }
   return { amount: total, lines };
