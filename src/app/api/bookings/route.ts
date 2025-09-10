@@ -21,6 +21,13 @@ const CreateBookingSchema = z.object({
 export async function POST(req: NextRequest) {
   const t0 = Date.now();
   
+  // Idempotency is mandatory for booking creation
+  const idemRaw = req.headers.get("idempotency-key");
+  const idem = idemRaw ? idemRaw.trim() : "";
+  if (!idem) {
+    return NextResponse.json({ error: "IDEMPOTENCY_KEY_REQUIRED" }, { status: 400 });
+  }
+
   try {
     const json = await req.json();
     const parsed = CreateBookingSchema.safeParse(json);
@@ -72,41 +79,77 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // Create booking record
-    const { data: booking, error: bookingErr } = await sb
+    const amount_due_minor = Math.round(quote.total * 100);
+
+    // 0) Fast path: if a booking with this (tenant,idempotency) already exists, return it.
+    {
+      const { data: existing, error: exErr } = await sb
+        .from("bookings")
+        .select("id, status, amount_due_minor, created_at")
+        .eq("tenant_id", quoteReq.tenantId)
+        .eq("idempotency_key", idem)
+        .maybeSingle();
+      if (exErr) throw exErr;
+      if (existing) {
+        const durationMs = Date.now() - t0;
+        log("bookings.create.idempotent", { 
+          tenantId: quoteReq.tenantId, 
+          serviceKey: quoteReq.serviceKey, 
+          idempotencyKey: idem, 
+          bookingId: existing.id, 
+          durationMs 
+        });
+        return NextResponse.json({
+          ok: true,
+          id: existing.id,
+          status: existing.status,
+          amount_due_minor: existing.amount_due_minor,
+          created_at: existing.created_at
+        }, { status: 200, headers: { "Idempotency-Key": idem } });
+      }
+    }
+
+    // 1) Insert with UPSERT on (tenant_id, idempotency_key) to guarantee single row
+    const insertPayload = {
+      tenant_id: quoteReq.tenantId,
+      service_key: quoteReq.serviceKey,
+      status: "pending" as const,
+      quote_request: quoteReq,
+      quote_response: quote,
+      amount_due_minor: amount_due_minor,
+      customer_email: customer.email,
+      customer_phone: customer.phone,
+      address_zip: address.zip,
+      address_street: address.street,
+      address_city: address.city,
+      idempotency_key: idem
+    };
+
+    const { data: up, error: upErr } = await sb
       .from("bookings")
-      .insert({
-        tenant_id: quoteReq.tenantId,
-        service_key: quoteReq.serviceKey,
-        quote_request: quoteReq,
-        quote_response: quote,
-        amount_due_minor: Math.round(quote.total * 100), // Convert to minor units
-        customer_email: customer.email,
-        customer_phone: customer.phone,
-        address_zip: address.zip,
-        address_street: address.street,
-        address_city: address.city
-      })
+      .upsert(insertPayload, { onConflict: "tenant_id,idempotency_key" })
       .select("id, status, created_at")
-      .single();
+      .maybeSingle();
 
-    if (bookingErr) throw bookingErr;
+    if (upErr) throw upErr;
+    const bookingRow = up!;
 
-    log("bookings.create.ok", { 
-      id: booking.id, 
+    const durationMs = Date.now() - t0;
+    log("bookings.create.ok", {
       tenantId: quoteReq.tenantId, 
-      serviceKey: quoteReq.serviceKey,
-      amountMinor: Math.round(quote.total * 100),
-      durationMs: Date.now() - t0 
+      serviceKey: quoteReq.serviceKey, 
+      durationMs, 
+      idempotencyKey: idem, 
+      bookingId: bookingRow.id
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       ok: true,
-      id: booking.id,
-      status: booking.status,
-      amount_due_minor: Math.round(quote.total * 100),
-      created_at: booking.created_at
-    }, { status: 201 });
+      id: bookingRow.id,
+      status: "pending",
+      amount_due_minor: amount_due_minor,
+      created_at: bookingRow.created_at
+    }, { status: 201, headers: { "Idempotency-Key": idem } });
 
   } catch (error: unknown) {
     const err = error as Error;
