@@ -16,6 +16,10 @@ export async function GET() {
 
     return NextResponse.json({ bookings: data });
   } catch (error) {
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    console.error("Debug bookings error:", error);
+    return NextResponse.json({ 
+      error: error instanceof Error ? error.message : String(error),
+      details: error
+    }, { status: 500 });
   }
 }
