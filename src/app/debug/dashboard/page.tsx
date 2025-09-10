@@ -46,6 +46,8 @@ export default function DebugDashboardPage() {
 
   const append = (k: string, msg: string) => setLogs((p) => ({ ...p, [k]: msg }));
 
+  const errorMessage = (e: unknown) => (e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e));
+
   const runHealth = async () => {
     setHealth("running");
     try {
@@ -53,8 +55,8 @@ export default function DebugDashboardPage() {
       const ok = r.status === 200;
       append("health", `status=${r.status}`);
       setHealth(ok ? "pass" : "fail");
-    } catch (e: any) {
-      append("health", String(e?.message || e));
+    } catch (e: unknown) {
+      append("health", errorMessage(e));
       setHealth("fail");
     }
   };
@@ -71,8 +73,8 @@ export default function DebugDashboardPage() {
       append("bad", `status=${r.status}\n${text}`);
       const ok = [400, 401, 422].includes(r.status) && (text.trim().startsWith("{") || r.headers.get("content-type")?.includes("application/json"));
       setBadQuote(ok ? "pass" : "fail");
-    } catch (e: any) {
-      append("bad", String(e?.message || e));
+    } catch (e: unknown) {
+      append("bad", errorMessage(e));
       setBadQuote("fail");
     }
   };
@@ -127,17 +129,24 @@ export default function DebugDashboardPage() {
       const invariant = json.total_minor === sum;
       const signs = (json.rut_minor ?? 0) <= 0 && (json.discount_minor ?? 0) <= 0;
       const lines = Array.isArray(json.lines) ? json.lines : [];
-      const hasRutTrue = lines.some((l) => (l.rutEligible ?? (l as any).rut_eligible) === true);
-      const hasRutFalse = lines.some((l) => (l.rutEligible ?? (l as any).rut_eligible) === false);
-      const sample = lines.slice(0, 6).map((l) => `${l.key}:${String(l.rutEligible ?? (l as any).rut_eligible)}:${String(l.amount_minor ?? (l as any).ex_vat_minor)}`).join(" | ");
+      const getRutEligible = (l: QuoteResp["lines"][number]): boolean | undefined =>
+        typeof l.rutEligible === "boolean" ? l.rutEligible : l.rut_eligible;
+      const getAmountMinor = (l: QuoteResp["lines"][number]): number | undefined =>
+        typeof l.amount_minor === "number" ? l.amount_minor : l.ex_vat_minor;
+      const hasRutTrue = lines.some((l) => getRutEligible(l) === true);
+      const hasRutFalse = lines.some((l) => getRutEligible(l) === false);
+      const sample = lines
+        .slice(0, 6)
+        .map((l) => `${l.key}:${String(getRutEligible(l))}:${String(getAmountMinor(l))}`)
+        .join(" | ");
       append(
         "good",
         `currency=${json.currency}\nsubtotal_ex_vat=${subtotal} vat=${json.vat_minor} rut=${json.rut_minor} discount=${json.discount_minor} total=${json.total_minor}\n` +
           `invariant=${invariant} signs=${signs} lines sample: ${sample} (hasRutTrue=${hasRutTrue}, hasRutFalse=${hasRutFalse})`
       );
       setGoodQuote(invariant && signs ? "pass" : "fail");
-    } catch (e: any) {
-      append("good", String(e?.message || e));
+    } catch (e: unknown) {
+      append("good", errorMessage(e));
       setGoodQuote("fail");
     }
   };
@@ -150,8 +159,8 @@ export default function DebugDashboardPage() {
       const ok = r.status === 200 && !txt.includes("❌");
       append("rules", `status=${r.status} hasFail=${txt.includes("❌")}`);
       setRules(ok ? "pass" : "fail");
-    } catch (e: any) {
-      append("rules", String(e?.message || e));
+    } catch (e: unknown) {
+      append("rules", errorMessage(e));
       setRules("fail");
     }
   };
@@ -170,13 +179,13 @@ export default function DebugDashboardPage() {
         headers: { "content-type": "application/json", "x-tenant-id": tenantId },
         body: JSON.stringify({ service_id: serviceId, customer: { email: "test@example.com" }, status: "pending" }),
       });
-      const created = await create.json().catch(() => ({}));
+  const created: unknown = await create.json().catch(() => ({} as unknown));
       if (!create.ok) {
         append("booking", `create status=${create.status}\n${JSON.stringify(created)}`);
         setBooking(create.status === 401 || create.status === 403 ? "pass" : "fail");
         return;
       }
-      const id = created?.id || created?.booking?.id;
+  const id = (created as { id?: string; booking?: { id?: string } })?.id ?? (created as { booking?: { id?: string } })?.booking?.id;
       if (!id) {
         append("booking", `create OK but no id in body: ${JSON.stringify(created)}`);
         setBooking("fail");
@@ -187,8 +196,8 @@ export default function DebugDashboardPage() {
       const ok = rej1.ok && (rej2.status === 409 || rej2.ok);
       append("booking", `reject1=${rej1.status} reject2=${rej2.status}`);
       setBooking(ok ? "pass" : "fail");
-    } catch (e: any) {
-      append("booking", String(e?.message || e));
+    } catch (e: unknown) {
+      append("booking", errorMessage(e));
       setBooking("fail");
     }
   };
