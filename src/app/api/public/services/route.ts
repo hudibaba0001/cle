@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       // Only the parts required client-side for rendering
       ui: {
         expects: s.model === "per_sqm" ? ["sqm"] : s.model === "hourly" ? ["hours"] : [],
-        addons: (cfg.addons ?? []).map((a: any) => ({
+        addons: (cfg.addons ?? []).map((a: { key: string; name: string; type: string; amount: number }) => ({
           key: a.key, name: a.name, type: a.type, amount: a.amount
         })),
         frequency: cfg.frequency_multipliers ?? { one_time: 1.0, monthly: 0.9, biweekly: 0.85, weekly: 0.8 },

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 
 interface Service {
   key: string;
@@ -57,12 +58,12 @@ export default function QuoteDebug() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <h1 style={{ fontSize: 24, margin: 0 }}>Quote Debug</h1>
         <div style={{ display: "flex", gap: 12 }}>
-          <a href="/widget/demo-cleaning" style={{ color: "#2563eb", textDecoration: "none" }}>
+          <Link href="/widget/demo-cleaning" style={{ color: "#2563eb", textDecoration: "none" }}>
             → Widget Test
-          </a>
-          <a href="/admin/services" style={{ color: "#2563eb", textDecoration: "none" }}>
+          </Link>
+          <Link href="/admin/services" style={{ color: "#2563eb", textDecoration: "none" }}>
             → Manage Services
-          </a>
+          </Link>
         </div>
       </div>
       <div style={{ display: "grid", gap: 12, maxWidth: 460 }}>

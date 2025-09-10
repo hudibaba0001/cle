@@ -20,7 +20,6 @@ const CreateBookingSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now();
-  const idem = req.headers.get("idempotency-key") ?? undefined;
   
   try {
     const json = await req.json();
@@ -66,7 +65,7 @@ export async function POST(req: NextRequest) {
         rut_enabled: tenant.rut_enabled
       },
       service: {
-        model: service.model as any,
+        model: service.model as "fixed" | "hourly" | "per_sqm" | "per_room" | "windows",
         schemaVersion: 1,
         config: service.config,
         name: quoteReq.serviceKey

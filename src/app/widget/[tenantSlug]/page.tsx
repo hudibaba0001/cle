@@ -11,6 +11,19 @@ type PublicServicesResp = {
   services: ServiceUI[];
 };
 
+interface QuoteResponse {
+  subtotal: number;
+  vat_amount: number;
+  rut_discount: number;
+  total: number;
+  currency: string;
+  breakdown?: {
+    base: number;
+    addons: { key: string; amount: number }[];
+    frequency_discount: number;
+  };
+}
+
 export default function WidgetPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const [resolvedParams, setResolvedParams] = useState<{ tenantSlug: string } | null>(null);
   const [data, setData] = useState<PublicServicesResp | null>(null);
@@ -19,7 +32,7 @@ export default function WidgetPage({ params }: { params: Promise<{ tenantSlug: s
   const [applyRUT, setApplyRUT] = useState(false);
   const [inputs, setInputs] = useState<Record<string, number>>({});
   const [addons, setAddons] = useState<Record<string, number>>({}); // quantity for per_unit, 1 for fixed
-  const [quote, setQuote] = useState<any>(null);
+  const [quote, setQuote] = useState<QuoteResponse | null>(null);
   const [busyQuote, setBusyQuote] = useState(false);
   const [busyBook, setBusyBook] = useState(false);
   const [email, setEmail] = useState("test@example.com");
@@ -147,7 +160,7 @@ export default function WidgetPage({ params }: { params: Promise<{ tenantSlug: s
         {/* Frequency + RUT */}
         <label>
           Frequency:
-          <select value={frequency} onChange={e=>setFrequency(e.target.value as any)}>
+          <select value={frequency} onChange={e=>setFrequency(e.target.value as "one_time"|"monthly"|"biweekly"|"weekly")}>
             <option value="one_time">One time</option>
             <option value="monthly">Monthly</option>
             <option value="biweekly">Biweekly</option>

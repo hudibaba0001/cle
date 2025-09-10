@@ -3,19 +3,14 @@
 import { useState, useEffect } from "react";
 import { ServiceConfigV1 } from "@/packages/pricing/types";
 
-// TODO: Add proper TypeScript types for API responses
-interface Service {
-  id: string;
-  tenant_id: string;
+// Service creation form data type
+interface CreateServiceData {
   key: string;
   name: string;
   model: "fixed" | "hourly" | "per_sqm" | "per_room" | "windows";
   config: ServiceConfigV1;
   is_public: boolean;
   is_active: boolean;
-  schema_version: number;
-  created_at: string;
-  updated_at: string;
 }
 
 interface ServiceListItem {
@@ -54,7 +49,7 @@ export default function AdminServicesPage() {
     }
   };
 
-  const handleCreateService = async (serviceData: any) => {
+  const handleCreateService = async (serviceData: CreateServiceData) => {
     try {
       const response = await fetch("/api/admin/services", {
         method: "POST",
@@ -183,11 +178,11 @@ export default function AdminServicesPage() {
   );
 }
 
-function CreateServiceModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => void }) {
-  const [formData, setFormData] = useState({
+function CreateServiceModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: CreateServiceData) => void }) {
+  const [formData, setFormData] = useState<CreateServiceData>({
     key: "",
     name: "",
-    model: "per_sqm" as const,
+    model: "per_sqm",
     config: {},
     is_public: true,
     is_active: true
@@ -214,7 +209,7 @@ function CreateServiceModal({ onClose, onSubmit }: { onClose: () => void; onSubm
     try {
       const config = JSON.parse(configText);
       onSubmit({ ...formData, config });
-    } catch (error) {
+    } catch {
       alert("Invalid JSON in config field");
     }
   };
@@ -256,7 +251,7 @@ function CreateServiceModal({ onClose, onSubmit }: { onClose: () => void; onSubm
             <label className="block text-sm font-medium text-gray-700 mb-2">Pricing Model</label>
             <select
               value={formData.model}
-              onChange={(e) => setFormData({ ...formData, model: e.target.value as any })}
+              onChange={(e) => setFormData({ ...formData, model: e.target.value as CreateServiceData["model"] })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="per_sqm">Per Square Meter</option>
