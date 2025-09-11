@@ -1,0 +1,26 @@
+﻿{
+  "tenant": { "currency": "SEK", "vat_rate": 25, "rut_enabled": true },
+  "service": {
+    "model": "universal_multiplier",
+    "name": "Per sqm",
+    "ratePerSqm": 2.5,
+    "frequencyMultipliers": { "one_time": 1.0, "weekly": 1.0, "biweekly": 1.15, "monthly": 1.4 },
+    "vatRate": 25,
+    "rutEligible": true,
+    "addons": [],
+    "fees": [{ "key": "travel", "name": "Travel fee", "amount": 50, "rutEligible": false }],
+    "modifiers": [{
+      "key": "pet",
+      "label": "Pets present",
+      "condition": { "type": "boolean", "when": true, "answerKey": "has_pets" },
+      "effect": { "target": "subtotal_before_modifiers", "mode": "percent", "value": 10, "direction": "increase", "rutEligible": true, "label": "+10% pets" }
+    }],
+    "minimum": 0
+  },
+  "frequency": "monthly",
+  "inputs": { "area": 50 },
+  "addons": [],
+  "applyRUT": true,
+  "coupon": { "code": "SAVE10", "type": "percent", "value": 10 },
+  "answers": { "has_pets": true }
+}
