@@ -35,6 +35,7 @@ type FormState = {
   fees: { key: string; name: string; amount: number; rutEligible: boolean }[];
   addons: { key: string; name: string; amount: number; rutEligible: boolean }[];
   modifiers: ModifierUI[];
+  hourTiers?: { min: number; max: number; hours: number }[];
 };
 
 const MODEL_OPTIONS: { label: string; value: Model }[] = [
@@ -48,7 +49,6 @@ const MODEL_OPTIONS: { label: string; value: Model }[] = [
 
 // ---- core mapper: FormState -> ServiceConfig (engine expects this shape)
 function buildServiceConfig(s: FormState) {
-  // shared
   const base = {
     model: s.model,
     name: s.name || "Unnamed",
@@ -71,22 +71,23 @@ function buildServiceConfig(s: FormState) {
       }
     })),
     minimum: Number(s.minimum || 0)
-  };
+  } as const;
 
-  // per-model specifics
   switch (s.model) {
     case "fixed_tier":
-      return { ...base, fixed_tier: { tiers: s.fixedTiers } };
+      return { ...base, tiers: s.fixedTiers };
     case "tiered_multiplier":
-      return { ...base, tiered_multiplier: { rateTiers: s.rateTiers } };
+      return { ...base, tiers: s.rateTiers };
     case "universal_multiplier":
-      return { ...base, universal_multiplier: { ratePerSqm: Number(s.ratePerSqm || 0) } };
+      return { ...base, ratePerSqm: Number(s.ratePerSqm || 0) };
     case "windows":
-      return { ...base, windows: { types: s.windowTypes } };
+      return { ...base, windowTypes: s.windowTypes };
     case "per_room":
-      return { ...base, per_room: { rooms: s.roomTypes } };
-    case "hourly_area":
-      return { ...base, hourly_area: { hoursPerSqm: Number(s.hoursPerSqm || 0.1), ratePerHour: Number(s.ratePerHour || 0) } };
+      return { ...base, roomTypes: s.roomTypes.map(r => ({ key: r.key, name: r.name, pricePerRoom: r.pricePerUnit })) };
+    case "hourly_area": {
+      const areaToHours = (s.hourTiers ?? []).map(t => ({ min: Number(t.min||0), max: Number(t.max||0), hours: Number(t.hours||0) }));
+      return { ...base, areaToHours, hourlyRate: Number(s.ratePerHour || 0) };
+    }
   }
 }
 
@@ -126,16 +127,22 @@ export default function ServiceBuilderV2Page() {
     ratePerSqm: 25,
     hoursPerSqm: 0.1, ratePerHour: 300,
     fees: [], addons: [],
-    modifiers: []
+    modifiers: [],
+    hourTiers: []
   });
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<Record<string, unknown> | null>(null);
 
   const inputs = useMemo(() => {
-    // minimal form → inputs inference, adjust per model
-    if (state.model === "windows") return { counts: Object.fromEntries(state.windowTypes.map((t, i) => [t.key || `window_${i}`, 1])) };
-    if (state.model === "per_room") return { counts: Object.fromEntries(state.roomTypes.map((t, i) => [t.key || `room_${i}`, 1])) };
-    return { area: 50 }; // default for area-based models
+    if (state.model === "windows") {
+      const map = Object.fromEntries(state.windowTypes.map((t, i) => [t.key || `window_${i}`, 1]));
+      return { windows: map };
+    }
+    if (state.model === "per_room") {
+      const map = Object.fromEntries(state.roomTypes.map((t, i) => [t.key || `room_${i}`, 1]));
+      return { rooms: map };
+    }
+    return { area: 50 };
   }, [state]);
 
   // Array management helpers
@@ -216,6 +223,120 @@ export default function ServiceBuilderV2Page() {
     }));
   };
 
+  // Hourly area tiers (area -> hours)
+  const addHourTier = () => {
+    setState(s => ({
+      ...s,
+      hourTiers: [...(s.hourTiers ?? []), { min: 0, max: 50, hours: 3 }],
+    }));
+  };
+
+  const updateHourTier = (index: number, field: keyof NonNullable<FormState["hourTiers"]>[number], value: number) => {
+    setState(s => ({
+      ...s,
+      hourTiers: (s.hourTiers ?? []).map((t, i) => (i === index ? { ...t, [field]: value } : t)),
+    }));
+  };
+
+  const removeHourTier = (index: number) => {
+    setState(s => ({
+      ...s,
+      hourTiers: (s.hourTiers ?? []).filter((_, i) => i !== index),
+    }));
+  };
+
+  // Add-ons
+  const addAddon = () => {
+    setState(s => ({
+      ...s,
+      addons: [...s.addons, { key: `addon_${s.addons.length}`, name: "", amount: 0, rutEligible: false }],
+    }));
+  };
+
+  const updateAddon = (index: number, field: keyof FormState["addons"][number], value: string | number | boolean) => {
+    setState(s => ({
+      ...s,
+      addons: s.addons.map((a, i) => (i === index ? { ...a, [field]: value as unknown as never } : a)),
+    }));
+  };
+
+  const removeAddon = (index: number) => {
+    setState(s => ({
+      ...s,
+      addons: s.addons.filter((_, i) => i !== index),
+    }));
+  };
+
+  // Fees
+  const addFee = () => {
+    setState(s => ({
+      ...s,
+      fees: [...s.fees, { key: `fee_${s.fees.length}`, name: "", amount: 0, rutEligible: false }],
+    }));
+  };
+
+  const updateFee = (index: number, field: keyof FormState["fees"][number], value: string | number | boolean) => {
+    setState(s => ({
+      ...s,
+      fees: s.fees.map((f, i) => (i === index ? { ...f, [field]: value as unknown as never } : f)),
+    }));
+  };
+
+  const removeFee = (index: number) => {
+    setState(s => ({
+      ...s,
+      fees: s.fees.filter((_, i) => i !== index),
+    }));
+  };
+
+  // Modifiers (boolean rules)
+  const addModifier = () => {
+    setState(s => ({
+      ...s,
+      modifiers: [
+        ...s.modifiers,
+        {
+          key: `mod_${Date.now()}`,
+          label: "New rule",
+          answerKey: "has_pets",
+          when: true,
+          targetUI: "subtotal",
+          mode: "percent",
+          value: 10,
+          direction: "increase",
+          rutEligible: false,
+        },
+      ],
+    }));
+  };
+
+  const updateModifier = (index: number, field: keyof ModifierUI, value: string | number | boolean) => {
+    setState(s => ({
+      ...s,
+      modifiers: s.modifiers.map((m, i) => (i === index ? { ...m, [field]: value as unknown as never } : m)),
+    }));
+  };
+
+  const removeModifier = (index: number) => {
+    setState(s => ({
+      ...s,
+      modifiers: s.modifiers.filter((_, i) => i !== index),
+    }));
+  };
+
+  // Ensure arrays have at least one row on model change
+  const handleModelChange = (model: Model) => {
+    setState(s => {
+      const next = { ...s, model } as FormState;
+      if (model === "fixed_tier" && next.fixedTiers.length === 0) next.fixedTiers = [{ min: 0, max: 100, price: 500 }];
+      if (model === "tiered_multiplier" && next.rateTiers.length === 0) next.rateTiers = [{ min: 0, max: 100, ratePerSqm: 25 }];
+      if (model === "windows" && next.windowTypes.length === 0) next.windowTypes = [{ key: "window_0", name: "Type", pricePerUnit: 100 }];
+      if (model === "per_room" && next.roomTypes.length === 0) next.roomTypes = [{ key: "room_0", name: "Room", pricePerUnit: 100 }];
+      if (model === "hourly_area" && (!next.hourTiers || next.hourTiers.length === 0)) next.hourTiers = [{ min: 1, max: 50, hours: 3 }];
+      return next;
+    });
+  };
+
   async function onPreview() {
     try {
       setErr(null);
@@ -267,7 +388,8 @@ export default function ServiceBuilderV2Page() {
         fixedTiers: [], rateTiers: [], windowTypes: [], roomTypes: [],
         ratePerSqm: 25,
         hoursPerSqm: 0.1, ratePerHour: 300,
-        fees: [], addons: [], modifiers: []
+        fees: [], addons: [], modifiers: [],
+        hourTiers: []
       });
       setPreview(null);
       
@@ -322,7 +444,7 @@ export default function ServiceBuilderV2Page() {
                 <label className="block text-sm font-medium mb-1">Pricing Model</label>
                 <select className="border rounded px-3 py-2 w-full" title="Select pricing model"
                   value={state.model}
-                  onChange={e=>setState(s=>({ ...s, model: e.target.value as Model }))}>
+                  onChange={e=>handleModelChange(e.target.value as Model)}>
                   {MODEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
               </div>
@@ -362,19 +484,30 @@ export default function ServiceBuilderV2Page() {
 
             {state.model === "hourly_area" && (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-          <div>
-                    <label className="block text-sm font-medium mb-1">Hours per m²</label>
-                    <input type="number" step="0.01" className="border rounded px-3 py-2 w-full" placeholder="e.g. 0.1"
-                      value={state.hoursPerSqm ?? 0} onChange={e=>setState(s=>({ ...s, hoursPerSqm: Number(e.target.value) }))}/>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Rate per hour (SEK)</label>
-                    <input type="number" className="border rounded px-3 py-2 w-full" placeholder="e.g. 300"
-                      value={state.ratePerHour ?? 0} onChange={e=>setState(s=>({ ...s, ratePerHour: Number(e.target.value) }))}/>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Area → Hours tiers</label>
+                  <button onClick={addHourTier} className="px-3 py-1 bg-blue-500 text-white rounded text-sm">Add Tier</button>
                 </div>
-                <p className="text-sm text-gray-500">Calculate hours based on area, then multiply by hourly rate</p>
+                <div className="space-y-2">
+                  {(state.hourTiers ?? []).map((t, i) => (
+                    <div key={i} className="grid grid-cols-5 gap-2 items-center">
+                      <input type="number" placeholder="Min m²" className="border rounded px-2 py-1" value={t.min}
+                        onChange={e=>updateHourTier(i, 'min', Number(e.target.value))} />
+                      <input type="number" placeholder="Max m²" className="border rounded px-2 py-1" value={t.max}
+                        onChange={e=>updateHourTier(i, 'max', Number(e.target.value))} />
+                      <input type="number" placeholder="Hours" className="border rounded px-2 py-1" value={t.hours}
+                        onChange={e=>updateHourTier(i, 'hours', Number(e.target.value))} />
+                      <span className="text-sm text-gray-600">hours</span>
+                      <button onClick={()=>removeHourTier(i)} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Remove</button>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Rate per hour (SEK)</label>
+                  <input type="number" className="border rounded px-3 py-2 w-full" placeholder="e.g. 300"
+                    value={state.ratePerHour ?? 0} onChange={e=>setState(s=>({ ...s, ratePerHour: Number(e.target.value) }))}/>
+                </div>
+                <p className="text-sm text-gray-500">Define area ranges mapping to total hours, then multiply by hourly rate</p>
               </div>
             )}
 
@@ -503,6 +636,75 @@ export default function ServiceBuilderV2Page() {
               Error: {JSON.stringify(err)}
             </div>}
           </div>
+        
+        {/* Add-ons / Fees / Modifiers */}
+        <div className="bg-white border rounded-lg p-4">
+          <h2 className="text-lg font-semibold mb-4">Add-ons, Fees & Modifiers</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Add-ons */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium">Add-ons</label>
+                <button onClick={addAddon} className="px-2 py-1 bg-blue-500 text-white rounded text-sm">Add</button>
+              </div>
+              <div className="space-y-2">
+                {state.addons.map((a, i) => (
+                  <div key={i} className="grid grid-cols-5 gap-2 items-center">
+                    <input className="border rounded px-2 py-1" placeholder="Key" value={a.key} onChange={e=>updateAddon(i,'key',e.target.value)} />
+                    <input className="border rounded px-2 py-1" placeholder="Name" value={a.name} onChange={e=>updateAddon(i,'name',e.target.value)} />
+                    <input type="number" className="border rounded px-2 py-1" placeholder="Amount" value={a.amount} onChange={e=>updateAddon(i,'amount',Number(e.target.value))} />
+                    <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={a.rutEligible} onChange={e=>updateAddon(i,'rutEligible',e.target.checked)} /> RUT</label>
+                    <button onClick={()=>removeAddon(i)} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Remove</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Fees */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium">Fees</label>
+                <button onClick={addFee} className="px-2 py-1 bg-blue-500 text-white rounded text-sm">Add</button>
+              </div>
+              <div className="space-y-2">
+                {state.fees.map((f, i) => (
+                  <div key={i} className="grid grid-cols-5 gap-2 items-center">
+                    <input className="border rounded px-2 py-1" placeholder="Key" value={f.key} onChange={e=>updateFee(i,'key',e.target.value)} />
+                    <input className="border rounded px-2 py-1" placeholder="Name" value={f.name} onChange={e=>updateFee(i,'name',e.target.value)} />
+                    <input type="number" className="border rounded px-2 py-1" placeholder="Amount" value={f.amount} onChange={e=>updateFee(i,'amount',Number(e.target.value))} />
+                    <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={f.rutEligible} onChange={e=>updateFee(i,'rutEligible',e.target.checked)} /> RUT</label>
+                    <button onClick={()=>removeFee(i)} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Remove</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          {/* Modifiers */}
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium">Modifiers (boolean rules)</label>
+              <button onClick={addModifier} className="px-2 py-1 bg-blue-500 text-white rounded text-sm">Add</button>
+            </div>
+            <div className="space-y-2">
+              {state.modifiers.map((m, i) => (
+                <div key={m.key} className="grid grid-cols-7 gap-2 items-center">
+                  <input className="border rounded px-2 py-1" placeholder="Key" value={m.key} onChange={e=>updateModifier(i,'key',e.target.value)} />
+                  <input className="border rounded px-2 py-1" placeholder="Label" value={m.label} onChange={e=>updateModifier(i,'label',e.target.value)} />
+                  <input className="border rounded px-2 py-1" placeholder="Answer Key" value={m.answerKey} onChange={e=>updateModifier(i,'answerKey',e.target.value)} />
+                  <select className="border rounded px-2 py-1" title="Modifier target" value={m.targetUI} onChange={e=>updateModifier(i,'targetUI',e.target.value)}>
+                    <option value="subtotal">Subtotal</option>
+                    <option value="base">Base after frequency</option>
+                  </select>
+                  <select className="border rounded px-2 py-1" title="Modifier mode" value={m.mode} onChange={e=>updateModifier(i,'mode',e.target.value)}>
+                    <option value="percent">Percent</option>
+                    <option value="fixed">Fixed</option>
+                  </select>
+                  <input type="number" className="border rounded px-2 py-1" placeholder="Value" value={m.value} onChange={e=>updateModifier(i,'value',Number(e.target.value))} />
+                  <button onClick={()=>removeModifier(i)} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Remove</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
         </div>
 
         {/* Preview Panel */}
