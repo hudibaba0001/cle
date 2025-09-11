@@ -36,6 +36,9 @@ type FormState = {
   addons: { key: string; name: string; amount: number; rutEligible: boolean }[];
   modifiers: ModifierUI[];
   hourTiers?: { min: number; max: number; hours: number }[];
+  // UI questions (boolean yes/no). If a question has a matching modifier using the same answerKey, it will affect price; otherwise it's informational only
+  questions: { key: string; label: string }[];
+  questionAnswers: Record<string, boolean>;
 };
 
 const MODEL_OPTIONS: { label: string; value: Model }[] = [
@@ -128,7 +131,9 @@ export default function ServiceBuilderV2Page() {
     hoursPerSqm: 0.1, ratePerHour: 300,
     fees: [], addons: [],
     modifiers: [],
-    hourTiers: []
+    hourTiers: [],
+    questions: [],
+    questionAnswers: {}
   });
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<Record<string, unknown> | null>(null);
@@ -337,11 +342,32 @@ export default function ServiceBuilderV2Page() {
     });
   };
 
+  // Questions
+  const addQuestion = () => {
+    setState(s => ({
+      ...s,
+      questions: [...s.questions, { key: `q_${Date.now()}`, label: "New question" }],
+    }));
+  };
+  const updateQuestion = (index: number, field: keyof FormState["questions"][number], value: string) => {
+    setState(s => ({
+      ...s,
+      questions: s.questions.map((q, i) => (i === index ? { ...q, [field]: value } : q)),
+    }));
+  };
+  const removeQuestion = (index: number) => {
+    setState(s => ({
+      ...s,
+      questions: s.questions.filter((_, i) => i !== index),
+    }));
+  };
+
   async function onPreview() {
     try {
       setErr(null);
+      // Collect answers from the simple questions panel (boolean yes/no)
       const answers: Record<string, unknown> = Object.fromEntries(
-        (state.modifiers || []).map(m => [m.answerKey, m.when]) // "Yes" toggles
+        (state.questions || []).map(q => [q.key, !!state.questionAnswers[q.key]])
       );
       const j = await previewQuote(tenant, state, inputs, answers);
       setPreview(j);
@@ -389,7 +415,9 @@ export default function ServiceBuilderV2Page() {
         ratePerSqm: 25,
         hoursPerSqm: 0.1, ratePerHour: 300,
         fees: [], addons: [], modifiers: [],
-        hourTiers: []
+        hourTiers: [],
+        questions: [],
+        questionAnswers: {}
       });
       setPreview(null);
       
@@ -637,9 +665,43 @@ export default function ServiceBuilderV2Page() {
             </div>}
           </div>
         
-        {/* Add-ons / Fees / Modifiers */}
+        {/* Frequency / Questions / Add-ons / Fees / Modifiers */}
         <div className="bg-white border rounded-lg p-4">
-          <h2 className="text-lg font-semibold mb-4">Add-ons, Fees & Modifiers</h2>
+          <h2 className="text-lg font-semibold mb-4">Pricing Controls</h2>
+
+          {/* Frequency */}
+          <div className="mb-6">
+            <div className="mb-2 font-medium">Frequency Multipliers</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {(["one_time","weekly","biweekly","monthly"] as const).map(k => (
+                <label key={k} className="text-sm">
+                  <div className="mb-1">{k.replace('_',' ')}</div>
+                  <input type="number" step="0.01" className="border rounded px-2 py-1 w-full" value={state.frequencyMultipliers[k]}
+                    onChange={e=>setState(s=>({ ...s, frequencyMultipliers: { ...s.frequencyMultipliers, [k]: Number(e.target.value) } }))}/>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Adjusts base after model, before modifiers. 1.0 = no change.</p>
+          </div>
+
+          {/* Simple Questions */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium">Simple Questions (Yes/No)</label>
+              <button onClick={addQuestion} className="px-2 py-1 bg-blue-500 text-white rounded text-sm">Add</button>
+            </div>
+            <div className="space-y-2">
+              {state.questions.map((q, i) => (
+                <div key={q.key} className="grid grid-cols-6 gap-2 items-center">
+                  <input className="border rounded px-2 py-1" placeholder="Answer key (e.g., has_pets)" value={q.key} onChange={e=>updateQuestion(i,'key', e.target.value)} />
+                  <input className="border rounded px-2 py-1 col-span-3" placeholder="Question label" value={q.label} onChange={e=>updateQuestion(i,'label', e.target.value)} />
+                  <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!state.questionAnswers[q.key]} onChange={e=>setState(s=>({ ...s, questionAnswers: { ...s.questionAnswers, [q.key]: e.target.checked } }))} /> Default: Yes</label>
+                  <button onClick={()=>removeQuestion(i)} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Remove</button>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">To affect price, add a modifier that references the same answerKey.</p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Add-ons */}
             <div>
