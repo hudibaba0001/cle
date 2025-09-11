@@ -5,6 +5,7 @@ import { ServiceConfig } from "@/lib/pricing-v2/types";
 
 // Minimal v2 Service Builder with Dynamic Pricing preview
 export default function AdminServicesV2Page() {
+  const [tenant, setTenant] = useState("8f98ad87-3f30-432d-9b00-f2a7c1c76c63");
   type ModifierRule = {
     key: string;
     label: string;
@@ -89,7 +90,7 @@ export default function AdminServicesV2Page() {
 
       const res = await fetch("/api/pricing/v2/quote", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-tenant-id": tenant },
         body: JSON.stringify({
           tenant: { currency: "SEK", vat_rate: 25, rut_enabled: false },
           service,
@@ -118,6 +119,10 @@ export default function AdminServicesV2Page() {
         <div>
           <h1 className="text-2xl font-bold">Service Builder v2</h1>
           <p className="text-gray-600">Dynamic pricing rules and live preview</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">Tenant</span>
+          <input className="border rounded px-2 py-1 text-sm" value={tenant} onChange={e=>setTenant(e.target.value)} />
         </div>
       </div>
 

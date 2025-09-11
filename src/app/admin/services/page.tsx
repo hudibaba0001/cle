@@ -8,11 +8,12 @@ type ServiceRow = {
   name: string;
   slug: string;
   model: string;
-  created_at: string;
+  created_at?: string;
+  updated_at: string;
 };
 
 export default function AdminServicesPage() {
-  const [tenant, setTenant] = useState("demo-tenant");
+  const [tenant, setTenant] = useState("8f98ad87-3f30-432d-9b00-f2a7c1c76c63");
   const [items, setItems] = useState<ServiceRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export default function AdminServicesPage() {
             <th className="text-left p-2">Name</th>
             <th className="text-left p-2">Slug</th>
             <th className="text-left p-2">Model</th>
-            <th className="text-left p-2">Created</th>
+            <th className="text-left p-2">Updated</th>
             <th className="text-left p-2">Action</th>
           </tr>
         </thead>
@@ -101,7 +102,7 @@ export default function AdminServicesPage() {
               <td className="p-2">{it.name}</td>
               <td className="p-2">{it.slug}</td>
               <td className="p-2">{it.model}</td>
-              <td className="p-2">{new Date(it.created_at).toLocaleString()}</td>
+              <td className="p-2">{new Date(it.updated_at).toLocaleString()}</td>
               <td className="p-2">
                 <Link className="text-blue-600 underline" href={`/admin/services/${it.id}?tenant=${tenant}`}>Open</Link>
               </td>

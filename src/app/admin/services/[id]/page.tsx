@@ -35,7 +35,7 @@ export default function ServiceDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => { params.then(setResolvedParams); }, [params]);
 
   const search = useSearchParams();
-  const tenant = search.get("tenant") || "demo-tenant";
+  const tenant = search.get("tenant") || "8f98ad87-3f30-432d-9b00-f2a7c1c76c63";
 
   const [svc, setSvc] = useState<ServiceRow | null>(null);
   const [loading, setLoading] = useState(false);

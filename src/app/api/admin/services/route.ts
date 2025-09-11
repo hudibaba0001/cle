@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const sb = supabaseAdmin();
   const { data, error } = await sb
     .from("services")
-    .select("id, tenant_id, name, slug, model, active, updated_at")
+    .select("id, tenant_id, name, slug, model, active, created_at, updated_at")
     .eq("tenant_id", tenantId)
     .order("updated_at", { ascending: false });
   if (error) return NextResponse.json({ error: "DB_ERROR", detail: error.message }, { status: 500 });

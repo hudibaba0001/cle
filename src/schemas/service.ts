@@ -9,7 +9,8 @@ export const FrequencyMultipliersSchema = z.object({
 
 const ModifierEffectSchema = z.object({
   target: z.enum(["base_after_frequency", "subtotal_before_modifiers"]),
-  mode: z.enum(["percent", "absolute"]),
+  // Align with pricing-v2 engine ("fixed" not "absolute")
+  mode: z.enum(["percent", "fixed"]),
   value: z.number(),
   direction: z.enum(["increase", "decrease"]),
   rutEligible: z.boolean().default(false),
