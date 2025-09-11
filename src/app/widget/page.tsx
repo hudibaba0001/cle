@@ -100,7 +100,7 @@ export default function WidgetPage() {
         <div className="space-y-3 border rounded-2xl p-4">
           <div className="grid md:grid-cols-2 gap-3">
             <label className="text-sm">Frequency
-              <select className="border rounded px-2 py-1 ml-2" value={frequency} onChange={e=>setFrequency(e.target.value as any)}>
+              <select className="border rounded px-2 py-1 ml-2" value={frequency} onChange={e=>setFrequency(e.target.value as "one_time"|"weekly"|"biweekly"|"monthly")}>
                 <option value="one_time">one_time</option>
                 <option value="weekly">weekly</option>
                 <option value="biweekly">biweekly</option>

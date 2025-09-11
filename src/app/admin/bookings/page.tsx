@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 
 type Row = {
   id: string; status: string; currency: string;
@@ -13,14 +13,15 @@ export default function AdminBookingsPage() {
   const [note, setNote] = useState<string | null>(null);
   const [working, setWorking] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setNote(null);
     const r = await fetch("/api/admin/bookings", { headers: { "x-tenant-id": tenant }, cache: "no-store" });
     const j = await r.json();
     if (!r.ok) setNote(j?.error || "Load failed");
     else setRows(j.items ?? []);
-  }
-  useEffect(() => { load(); }, [tenant]);
+  }, [tenant]);
+  
+  useEffect(() => { load(); }, [load]);
 
   async function reject(id: string) {
     setWorking(id); setNote(null);
