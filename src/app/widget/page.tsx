@@ -119,7 +119,7 @@ export default function WidgetPage() {
             <div>
               <div className="font-medium text-sm mb-1">Counts</div>
               <div className="grid md:grid-cols-3 gap-2">
-                {(fields.windowTypes.length ? fields.windowTypes : fields.roomTypes).map((t: {key: string; name: string}) => (
+                {((fields?.windowTypes?.length || 0) > 0 ? (fields?.windowTypes || []) : (fields?.roomTypes || [])).map((t: {key: string; name: string}) => (
                   <label key={t.key} className="text-sm flex items-center justify-between gap-2 border rounded px-2 py-1">
                     <span>{t.name}</span>
                     <input type="number" min={0} className="border rounded px-2 py-1 w-24"
@@ -136,7 +136,7 @@ export default function WidgetPage() {
             <div>
               <div className="font-medium text-sm">Questions</div>
               <div className="grid md:grid-cols-3 gap-2 mt-1">
-                {fields.booleanMods.map((m: Record<string, unknown>) => (
+                {(fields?.booleanMods || []).map((m: Record<string, unknown>) => (
                   <label key={m.key as string} className="text-sm flex items-center gap-2 border rounded px-2 py-1">
                     <input type="checkbox"
                       checked={!!answers[(m.condition as Record<string, unknown>)?.answerKey as string]}
