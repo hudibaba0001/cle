@@ -115,7 +115,7 @@ export default function WidgetPage() {
             )}
           </div>
 
-          {(fields?.windowTypes?.length>0 || fields?.roomTypes?.length>0) && (
+          {((fields?.windowTypes?.length || 0) > 0 || (fields?.roomTypes?.length || 0) > 0) && (
             <div>
               <div className="font-medium text-sm mb-1">Counts</div>
               <div className="grid md:grid-cols-3 gap-2">
