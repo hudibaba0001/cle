@@ -10,7 +10,7 @@ const Body = z.object({
     vat_rate: z.number().min(0).max(100).default(25),
     rut_enabled: z.boolean().default(false),
   }),
-  service_id: z.string().min(1),
+  service_id: z.string().uuid(),
   frequency: FrequencyKey.default("one_time"),
   inputs: z.record(z.string(), z.unknown()).default({}),
   addons: z.array(z.object({ key: z.string(), quantity: z.number().int().positive().optional() })).default([]),
@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     .single();
   if (error || !svc) return NextResponse.json({ error: "SERVICE_NOT_FOUND" }, { status: 404 });
 
+  // Server-side pricing using stored config prevents client tampering
   const quote = computeQuoteV2({
     tenant: body.tenant,
     service: svc.config as ServiceConfig,

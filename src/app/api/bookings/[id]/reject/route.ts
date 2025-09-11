@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { log } from "@/lib/log";
 
-const DEMO_TENANT = "00000000-0000-0000-0000-000000000001";
 const Body = z.object({ reason: z.string().min(2).max(500) });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const tenantId = req.headers.get("x-tenant-id");
+  if (!tenantId) return NextResponse.json({ error: "TENANT_REQUIRED" }, { status: 401 });
+
   const resolvedParams = await params;
   const idem = (req.headers.get("idempotency-key") || "").trim();
   if (!idem) return NextResponse.json({ error: "IDEMPOTENCY_KEY_REQUIRED" }, { status: 400 });
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const sb = supabaseAdmin();
   const { data: current, error: cErr } = await sb.from("bookings")
     .select("id, status, reject_reason")
-    .eq("tenant_id", DEMO_TENANT).eq("id", resolvedParams.id).maybeSingle();
+    .eq("tenant_id", tenantId).eq("id", resolvedParams.id).maybeSingle();
   if (cErr) return NextResponse.json({ error: "DB_ERROR" }, { status: 500 });
   if (!current) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: upd, error: uErr } = await sb.from("bookings")
     .update({ status: "rejected", reject_reason: parsed.data.reason })
-    .eq("tenant_id", DEMO_TENANT)
+    .eq("tenant_id", tenantId)
     .eq("id", resolvedParams.id)
     .eq("status", "pending")
     .select("id, status, reject_reason")
@@ -42,6 +43,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (uErr) return NextResponse.json({ error: "DB_ERROR" }, { status: 500 });
   if (!upd) return NextResponse.json({ error: "CONFLICT", message: "Booking updated by another process" }, { status: 409 });
 
-  log("bookings.reject.ok", { bookingId: resolvedParams.id });
+  // Audit
+  await sb.from("audit_logs").insert({
+    tenant_id: tenantId,
+    action: "booking_rejected",
+    entity: "booking",
+    entity_id: upd.id,
+    meta: { reason: parsed.data.reason }
+  });
+
   return NextResponse.json(upd, { status: 200, headers: { "Idempotency-Key": idem } });
 }

@@ -43,9 +43,16 @@ export default function WidgetPage() {
     if (!sel) return { needsArea:false, windowTypes:[] as SimpleType[], roomTypes:[] as SimpleType[], booleanMods:[] as SimpleBoolMod[] };
     const cfg = sel.config as ServiceConfig;
     // derive simple shapes for UI
-    const windowTypes: SimpleType[] = (cfg as any).windowTypes || (cfg as any).windows?.types || [];
-    const roomTypes: SimpleType[] = (cfg as any).roomTypes || (cfg as any).per_room?.rooms || [];
-    const booleanMods: SimpleBoolMod[] = (cfg.modifiers ?? []).filter((m: any) => m?.condition?.type === "boolean");
+    const windowTypes: SimpleType[] = cfg.model === "windows" ? cfg.windowTypes.map(w=>({ key:w.key, name:w.name })) : [];
+    const roomTypes: SimpleType[] = cfg.model === "per_room" ? cfg.roomTypes.map(r=>({ key:r.key, name:r.name })) : [];
+    const isBoolMod = (m: unknown): m is SimpleBoolMod => {
+      if (typeof m !== "object" || m === null) return false;
+      const mm = m as Record<string, unknown>;
+      const cond = mm["condition"] as Record<string, unknown> | undefined;
+      return typeof mm["key"] === "string" && typeof mm["label"] === "string" &&
+        cond !== undefined && cond["type"] === "boolean" && typeof cond["answerKey"] === "string" && typeof cond["when"] === "boolean";
+    };
+    const booleanMods: SimpleBoolMod[] = (cfg.modifiers ?? []).filter(isBoolMod);
     return {
       needsArea: ["fixed_tier","tiered_multiplier","universal_multiplier","hourly_area"].includes(sel.model),
       windowTypes,
@@ -101,7 +108,7 @@ export default function WidgetPage() {
         <div className="space-y-3 border rounded p-4">
           <div className="grid md:grid-cols-2 gap-3">
             <label className="text-sm">Frequency
-              <select className="border rounded px-2 py-1 ml-2" value={frequency} onChange={e=>setFrequency(e.target.value as any)}>
+              <select className="border rounded px-2 py-1 ml-2" value={frequency} onChange={e=>setFrequency(e.target.value as FrequencyKey)}>
                 <option value="one_time">one_time</option>
                 <option value="weekly">weekly</option>
                 <option value="biweekly">biweekly</option>
@@ -110,7 +117,7 @@ export default function WidgetPage() {
             </label>
             {expects.needsArea && (
               <label className="text-sm">Area (sqm)
-                <input type="number" className="border rounded px-2 py-1 ml-2 w-24" min={0} value={(inputs as any).area ?? 50}
+                <input type="number" className="border rounded px-2 py-1 ml-2 w-24" min={0} value={(inputs as Record<string, unknown>).area as number ?? 50}
                        onChange={e=>setInputs(prev=>({ ...(prev||{}), area: Number(e.target.value||0) }))} />
               </label>
             )}
