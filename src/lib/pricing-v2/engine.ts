@@ -83,19 +83,28 @@ function modifierLines(svc: ServiceConfig, answers: Record<string, unknown>, ctx
   return out;
 }
 
-export function computeQuoteV2(req: unknown): QuoteBreakdown {
+export function computeQuoteV2(
+  req: unknown,
+  runtime?: { frequencyMultiplierOverride?: number; answersOverride?: Record<string, unknown> }
+): QuoteBreakdown {
   const parsed = QuoteRequestSchema.parse(req);
   const { tenant, service, inputs, addons, frequency, applyRUT, coupon, answers } = parsed;
 
-  // Base → frequency
+  // Base → frequency (allow runtime override for custom frequency keys)
   const baseRaw = baseForModel(service, inputs);
-  const baseAfterFreq = applyFrequency(baseRaw, service.frequencyMultipliers, frequency);
+  const baseAfterFreq = runtime?.frequencyMultiplierOverride
+    ? baseRaw * runtime.frequencyMultiplierOverride
+    : applyFrequency(baseRaw, service.frequencyMultipliers, frequency);
   const baseLine: QuoteLine = { key:"base", label:"Base (after frequency)", rutEligible: service.rutEligible ?? true, amount_minor: toMinor(baseAfterFreq) };
 
   const addLines = addonLines(service, addons);
   const fLines = feeLines(service);
   const subtotalBeforeMods_minor = baseLine.amount_minor + addLines.reduce((s,l)=>s+l.amount_minor,0) + fLines.reduce((s,l)=>s+l.amount_minor,0);
-  const modLines = modifierLines(service, answers ?? {}, { baseAfterFreq: fromMinor(baseLine.amount_minor), subtotalBeforeMods: fromMinor(subtotalBeforeMods_minor) });
+  const modLines = modifierLines(
+    service,
+    (runtime?.answersOverride ?? (answers ?? {})) as Record<string, unknown>,
+    { baseAfterFreq: fromMinor(baseLine.amount_minor), subtotalBeforeMods: fromMinor(subtotalBeforeMods_minor) }
+  );
 
   const subtotal_ex_vat_minor = subtotalBeforeMods_minor + modLines.reduce((s,l)=>s+l.amount_minor,0);
   const vat_minor = Math.round(subtotal_ex_vat_minor * ((service.vatRate ?? tenant.vat_rate ?? 25)/100));

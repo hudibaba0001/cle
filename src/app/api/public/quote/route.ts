@@ -3,6 +3,8 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { computeQuoteV2 } from "@/lib/pricing-v2/engine";
 import { FrequencyKey, QuoteRequest, ServiceConfig } from "@/lib/pricing-v2/types";
+import { getFrequencyMultiplier, compileDynamicToModifiers, expandAnswersForDynamic } from "@/lib/pricing-v2/dynamic";
+import { z as zod } from "zod";
 
 const Body = z.object({
   tenant: z.object({
@@ -38,16 +40,22 @@ export async function POST(req: NextRequest) {
     .single();
   if (error || !svc) return NextResponse.json({ error: "SERVICE_NOT_FOUND" }, { status: 404 });
 
+  const rawService = svc.config as ServiceConfig;
+  const dyn = compileDynamicToModifiers(rawService as any);
+  const mergedService = { ...(rawService as any), modifiers: [ ...(rawService.modifiers ?? []), ...dyn ] } as ServiceConfig;
+  const freqMul = getFrequencyMultiplier(mergedService as any, body.frequency as any);
+  const answersOverride = expandAnswersForDynamic(mergedService as any, body.answers as Record<string, unknown>);
+
   // Server-side pricing using stored config prevents client tampering
   const quote = computeQuoteV2({
     tenant: body.tenant,
-    service: svc.config as ServiceConfig,
+    service: mergedService,
     frequency: body.frequency,
     inputs: body.inputs as QuoteRequest["inputs"],
     addons: body.addons,
     applyRUT: body.applyRUT,
     coupon: body.coupon,
     answers: body.answers,
-  });
+  }, { frequencyMultiplierOverride: freqMul, answersOverride });
   return NextResponse.json(quote, { status: 200 });
 }
