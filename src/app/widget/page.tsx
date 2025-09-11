@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 
-type Svc = { id: string; name: string; model: string; config: any; vat_rate: number; rut_eligible: boolean; };
+type Svc = { id: string; name: string; model: string; config: Record<string, unknown>; vat_rate: number; rut_eligible: boolean; };
 
 export default function WidgetPage() {
   const [tenant, setTenant] = useState("demo-tenant");
@@ -9,11 +9,11 @@ export default function WidgetPage() {
   const [sel, setSel] = useState<Svc | null>(null);
   const [area, setArea] = useState(50);
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [frequency, setFrequency] = useState<"one_time"|"weekly"|"biweekly"|"monthly">("monthly");
-  const [quote, setQuote] = useState<any | null>(null);
+  const [quote, setQuote] = useState<Record<string, unknown> | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [booking, setBooking] = useState<any | null>(null);
+  const [booking, setBooking] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -25,13 +25,13 @@ export default function WidgetPage() {
   }, [tenant]);
 
   const fields = useMemo(() => {
-    if (!sel) return null as any;
+    if (!sel) return null;
     const c = sel.config || {};
     return {
       needsArea: ["fixed_tier","tiered_multiplier","universal_multiplier","hourly_area"].includes(sel.model),
-      windowTypes: c?.windowTypes || [],
-      roomTypes: c?.roomTypes || [],
-      booleanMods: (c?.modifiers || []).filter((m: any) => m?.condition?.type === "boolean")
+      windowTypes: (c as Record<string, unknown>)?.windowTypes as Array<{key: string; name: string}> || [],
+      roomTypes: (c as Record<string, unknown>)?.roomTypes as Array<{key: string; name: string}> || [],
+      booleanMods: ((c as Record<string, unknown>)?.modifiers as Array<Record<string, unknown>> || []).filter((m: Record<string, unknown>) => m?.condition && (m.condition as Record<string, unknown>)?.type === "boolean")
     };
   }, [sel]);
 
@@ -39,7 +39,7 @@ export default function WidgetPage() {
     if (!sel) return;
     setQuote(null); setBooking(null); setNote(null);
     const tenantInfo = { currency: "SEK", vat_rate: sel.vat_rate ?? 25, rut_enabled: !!sel.rut_eligible };
-    const inputs: any = {};
+    const inputs: Record<string, unknown> = {};
     if (fields?.needsArea) inputs.area = area;
     if ((fields?.windowTypes?.length||0) > 0 || (fields?.roomTypes?.length||0) > 0) inputs.counts = counts;
     const r = await fetch("/api/public/quote", {
@@ -56,7 +56,7 @@ export default function WidgetPage() {
     const body = {
       service_id: sel.id,
       frequency,
-      inputs: quote.inputs ?? { area },
+      inputs: (quote as Record<string, unknown>).inputs ?? { area },
       answers,
       customer: { name: "Widget Tester", email: "test@example.com", phone: "+46700000000", address: "Street 1" }
     };
@@ -71,9 +71,10 @@ export default function WidgetPage() {
 
   const invariantOK = useMemo(() => {
     if (!quote) return null;
-    const sub = (quote.subtotal_ex_vat_minor ?? quote.subtotal_minor) | 0;
-    const sum = (sub|0) + (quote.vat_minor|0) + (quote.rut_minor|0) + (quote.discount_minor|0);
-    return (quote.total_minor|0) === sum;
+    const q = quote as Record<string, unknown>;
+    const sub = (q.subtotal_ex_vat_minor ?? q.subtotal_minor) as number | 0;
+    const sum = (sub|0) + ((q.vat_minor as number)|0) + ((q.rut_minor as number)|0) + ((q.discount_minor as number)|0);
+    return ((q.total_minor as number)|0) === sum;
   }, [quote]);
 
   return (
@@ -81,12 +82,12 @@ export default function WidgetPage() {
       <h1 className="text-2xl font-bold">Widget</h1>
       <div className="flex gap-2 items-center">
         <label className="text-sm">Tenant</label>
-        <input className="border rounded px-2 py-1" value={tenant} onChange={e=>setTenant(e.target.value)} />
+        <input className="border rounded px-2 py-1" placeholder="Enter tenant ID" value={tenant} onChange={e=>setTenant(e.target.value)} />
       </div>
 
       <div className="space-y-2">
         <label className="block text-sm font-medium">Service</label>
-        <select className="border rounded px-2 py-2 w-full" value={sel?.id ?? ""} onChange={e=>{
+        <select className="border rounded px-2 py-2 w-full" title="Select a service" value={sel?.id ?? ""} onChange={e=>{
           const s = services.find(x=>x.id===e.target.value) || null;
           setSel(s); setQuote(null); setBooking(null); setCounts({});
         }}>
@@ -118,7 +119,7 @@ export default function WidgetPage() {
             <div>
               <div className="font-medium text-sm mb-1">Counts</div>
               <div className="grid md:grid-cols-3 gap-2">
-                {(fields.windowTypes.length ? fields.windowTypes : fields.roomTypes).map((t: any) => (
+                {(fields.windowTypes.length ? fields.windowTypes : fields.roomTypes).map((t: {key: string; name: string}) => (
                   <label key={t.key} className="text-sm flex items-center justify-between gap-2 border rounded px-2 py-1">
                     <span>{t.name}</span>
                     <input type="number" min={0} className="border rounded px-2 py-1 w-24"
@@ -135,12 +136,12 @@ export default function WidgetPage() {
             <div>
               <div className="font-medium text-sm">Questions</div>
               <div className="grid md:grid-cols-3 gap-2 mt-1">
-                {fields.booleanMods.map((m: any) => (
-                  <label key={m.key} className="text-sm flex items-center gap-2 border rounded px-2 py-1">
+                {fields.booleanMods.map((m: Record<string, unknown>) => (
+                  <label key={m.key as string} className="text-sm flex items-center gap-2 border rounded px-2 py-1">
                     <input type="checkbox"
-                      checked={!!answers[m.condition?.answerKey]}
-                      onChange={e=>setAnswers(prev=>({ ...prev, [m.condition.answerKey]: e.target.checked }))}/>
-                    <span>{m.label}</span>
+                      checked={!!answers[(m.condition as Record<string, unknown>)?.answerKey as string]}
+                      onChange={e=>setAnswers(prev=>({ ...prev, [(m.condition as Record<string, unknown>).answerKey as string]: e.target.checked }))}/>
+                    <span>{m.label as string}</span>
                   </label>
                 ))}
               </div>

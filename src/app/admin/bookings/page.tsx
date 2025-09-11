@@ -20,7 +20,7 @@ export default function AdminBookingsPage() {
     if (!r.ok) setNote(j?.error || "Load failed");
     else setRows(j.items ?? []);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [tenant]);
 
   async function reject(id: string) {
     setWorking(id); setNote(null);
@@ -56,7 +56,7 @@ export default function AdminBookingsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Admin · Bookings</h1>
         <div className="flex gap-2 items-center">
-          <input className="border rounded px-2 py-1" value={tenant} onChange={e=>setTenant(e.target.value)} />
+          <input className="border rounded px-2 py-1" placeholder="Enter tenant ID" value={tenant} onChange={e=>setTenant(e.target.value)} />
           <button onClick={load} className="px-3 py-2 rounded bg-gray-100">Reload</button>
         </div>
       </div>
