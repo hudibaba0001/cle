@@ -98,19 +98,31 @@ alter table public.audit_logs enable row level security;
 
 -- Policies assume a JWT claim: request.jwt.claims ->> 'tenant_id'
 -- If you bootstrap with service-role, your API must enforce x-tenant-id equality.
-create policy if not exists svc_select on public.services for select
+
+-- Drop existing policies if they exist, then recreate
+do $$
+begin
+  drop policy if exists svc_select on public.services;
+  drop policy if exists svc_all on public.services;
+  drop policy if exists bkg_select on public.bookings;
+  drop policy if exists bkg_all on public.bookings;
+  drop policy if exists aud_select on public.audit_logs;
+  drop policy if exists aud_insert on public.audit_logs;
+end $$;
+
+create policy svc_select on public.services for select
   using (tenant_id = coalesce(current_setting('request.jwt.claims', true)::jsonb->>'tenant_id',''));
-create policy if not exists svc_all on public.services for all
+create policy svc_all on public.services for all
   using (tenant_id = coalesce(current_setting('request.jwt.claims', true)::jsonb->>'tenant_id',''))
   with check (tenant_id = coalesce(current_setting('request.jwt.claims', true)::jsonb->>'tenant_id',''));
 
-create policy if not exists bkg_select on public.bookings for select
+create policy bkg_select on public.bookings for select
   using (tenant_id = coalesce(current_setting('request.jwt.claims', true)::jsonb->>'tenant_id',''));
-create policy if not exists bkg_all on public.bookings for all
+create policy bkg_all on public.bookings for all
   using (tenant_id = coalesce(current_setting('request.jwt.claims', true)::jsonb->>'tenant_id',''))
   with check (tenant_id = coalesce(current_setting('request.jwt.claims', true)::jsonb->>'tenant_id',''));
 
-create policy if not exists aud_select on public.audit_logs for select
+create policy aud_select on public.audit_logs for select
   using (tenant_id = coalesce(current_setting('request.jwt.claims', true)::jsonb->>'tenant_id',''));
-create policy if not exists aud_insert on public.audit_logs for insert
+create policy aud_insert on public.audit_logs for insert
   with check (tenant_id = coalesce(current_setting('request.jwt.claims', true)::jsonb->>'tenant_id',''));

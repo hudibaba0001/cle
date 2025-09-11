@@ -2,24 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { log } from "@/lib/log";
-import { QuoteRequestSchema } from "@/packages/pricing/types";
-import { computeQuote } from "@/packages/pricing";
+import { computeQuoteV2 } from "@/lib/pricing-v2/engine";
+import { FrequencyKey, ServiceConfig } from "@/lib/pricing-v2/types";
 
 const CreateBookingSchema = z.object({
-  quote: QuoteRequestSchema,
+  service_id: z.string().uuid(),
+  frequency: FrequencyKey.default("one_time"),
+  inputs: z.record(z.string(), z.unknown()).default({}),
+  answers: z.record(z.string(), z.unknown()).default({}),
   customer: z.object({
+    name: z.string().min(1),
     email: z.string().email(),
-    phone: z.string().optional()
-  }),
-  address: z.object({
-    zip: z.string().min(1),
-    street: z.string().optional(),
-    city: z.string().optional()
+    phone: z.string().min(1),
+    address: z.string().min(1)
   })
 });
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now();
+  
+  // Get tenant from header
+  const tenantId = req.headers.get("x-tenant-id");
+  if (!tenantId) {
+    return NextResponse.json({ error: "TENANT_REQUIRED" }, { status: 401 });
+  }
   
   // Idempotency is mandatory for booking creation
   const idemRaw = req.headers.get("idempotency-key");
@@ -35,119 +41,107 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "INVALID_REQUEST", details: parsed.error.flatten() }, { status: 400 });
     }
 
-    const { quote: quoteReq, customer, address } = parsed.data;
+    const { service_id, frequency, inputs, answers, customer } = parsed.data;
     
     const sb = supabaseAdmin();
 
-    // Get tenant and service for validation
-    const { data: tenant, error: tenantErr } = await sb
-      .from("tenants")
-      .select("id, currency, vat_rate, rut_enabled, is_active")
-      .eq("id", quoteReq.tenantId)
-      .maybeSingle();
-
-    if (tenantErr) throw tenantErr;
-    if (!tenant || !tenant.is_active) {
-      return NextResponse.json({ error: "TENANT_NOT_FOUND_OR_INACTIVE" }, { status: 404 });
-    }
-
+    // Get service for validation and pricing
     const { data: service, error: serviceErr } = await sb
       .from("services")
-      .select("id, model, config, is_active")
-      .eq("tenant_id", quoteReq.tenantId)
-      .eq("key", quoteReq.serviceKey)
-      .maybeSingle();
+      .select("id, tenant_id, name, slug, model, active, vat_rate, rut_eligible, config")
+      .eq("tenant_id", tenantId)
+      .eq("id", service_id)
+      .eq("active", true)
+      .single();
 
-    if (serviceErr) throw serviceErr;
-    if (!service || !service.is_active) {
-      return NextResponse.json({ error: "SERVICE_NOT_FOUND_OR_INACTIVE" }, { status: 404 });
+    if (serviceErr || !service) {
+      return NextResponse.json({ error: "SERVICE_NOT_FOUND" }, { status: 404 });
     }
 
-    // Compute quote to get final pricing
-    const quote = computeQuote({
-      req: quoteReq,
+    // Server-side quote computation using stored config (prevents client tampering)
+    const quote = computeQuoteV2({
       tenant: {
-        currency: tenant.currency,
-        vat_rate: tenant.vat_rate,
-        rut_enabled: tenant.rut_enabled
+        currency: "SEK",
+        vat_rate: service.vat_rate,
+        rut_enabled: service.rut_eligible
       },
-      service: {
-        model: service.model as "fixed" | "hourly" | "per_sqm" | "per_room" | "windows",
-        schemaVersion: 1,
-        config: service.config,
-        name: quoteReq.serviceKey
-      }
+      service: service.config as ServiceConfig,
+      frequency,
+      inputs,
+      addons: [],
+      applyRUT: service.rut_eligible,
+      answers
     });
 
-    const amount_due_minor = Math.round(quote.total * 100);
-
-    // 0) Fast path: if a booking with this (tenant,idempotency) already exists, return it.
-    {
-      const { data: existing, error: exErr } = await sb
-        .from("bookings")
-        .select("id, status, amount_due_minor, created_at")
-        .eq("tenant_id", quoteReq.tenantId)
-        .eq("idempotency_key", idem)
-        .maybeSingle();
-      if (exErr) throw exErr;
-      if (existing) {
-        const durationMs = Date.now() - t0;
-        log("bookings.create.idempotent", { 
-          tenantId: quoteReq.tenantId, 
-          serviceKey: quoteReq.serviceKey, 
-          idempotencyKey: idem, 
-          bookingId: existing.id, 
-          durationMs 
-        });
-        return NextResponse.json({
-          ok: true,
-          id: existing.id,
-          status: existing.status,
-          amount_due_minor: existing.amount_due_minor,
-          created_at: existing.created_at
-        }, { status: 200, headers: { "Idempotency-Key": idem } });
-      }
+    // Fast path: check for existing booking with same idempotency key
+    const { data: existing, error: exErr } = await sb
+      .from("bookings")
+      .select("id, status, total_minor, created_at")
+      .eq("tenant_id", tenantId)
+      .eq("idempotency_key", idem)
+      .maybeSingle();
+    
+    if (exErr) throw exErr;
+    if (existing) {
+      log("bookings.create.idempotent", { 
+        tenantId, 
+        serviceId: service_id,
+        idempotencyKey: idem, 
+        bookingId: existing.id,
+        durationMs: Date.now() - t0
+      });
+      return NextResponse.json({
+        id: existing.id,
+        status: existing.status,
+        total_minor: existing.total_minor,
+        created_at: existing.created_at
+      }, { status: 200, headers: { "Idempotency-Key": idem } });
     }
 
-    // 1) Insert with UPSERT on (tenant_id, idempotency_key) to guarantee single row
+    // Create new booking
     const insertPayload = {
-      tenant_id: quoteReq.tenantId,
-      service_key: quoteReq.serviceKey,
+      tenant_id: tenantId,
+      service_id: service_id,
       status: "pending" as const,
-      quote_request: quoteReq,
-      quote_response: quote,
-      amount_due_minor: amount_due_minor,
-      customer_email: customer.email,
-      customer_phone: customer.phone,
-      address_zip: address.zip,
-      address_street: address.street,
-      address_city: address.city,
+      currency: quote.currency,
+      total_minor: quote.total_minor,
+      vat_minor: quote.vat_minor,
+      rut_minor: quote.rut_minor,
+      discount_minor: quote.discount_minor,
+      snapshot: quote,
+      customer: customer,
       idempotency_key: idem
     };
 
-    const { data: up, error: upErr } = await sb
+    const { data: bookingRow, error: insertErr } = await sb
       .from("bookings")
-      .upsert(insertPayload, { onConflict: "tenant_id,idempotency_key" })
-      .select("id, status, created_at")
-      .maybeSingle();
+      .insert(insertPayload)
+      .select("id, status, total_minor, created_at")
+      .single();
 
-    if (upErr) throw upErr;
-    const bookingRow = up!;
+    if (insertErr) throw insertErr;
 
-    const durationMs = Date.now() - t0;
+    // Log audit event
+    await sb.from("audit_logs").insert({
+      tenant_id: tenantId,
+      action: "booking_created",
+      entity: "booking",
+      entity_id: bookingRow.id,
+      meta: { service_id, customer_email: customer.email }
+    });
+
     log("bookings.create.ok", {
-      tenantId: quoteReq.tenantId, 
-      serviceKey: quoteReq.serviceKey, 
-      durationMs, 
-      idempotencyKey: idem, 
-      bookingId: bookingRow.id
+      tenantId, 
+      serviceId: service_id,
+      bookingId: bookingRow.id,
+      durationMs: Date.now() - t0,
+      idempotencyKey: idem
     });
 
     return NextResponse.json({
-      ok: true,
       id: bookingRow.id,
-      status: "pending",
-      amount_due_minor: amount_due_minor,
+      status: bookingRow.status,
+      total_minor: bookingRow.total_minor,
       created_at: bookingRow.created_at
     }, { status: 201, headers: { "Idempotency-Key": idem } });
 

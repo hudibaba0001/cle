@@ -1,152 +1,145 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
-import { ServiceConfig, QuoteBreakdown, FrequencyKey } from "@/lib/pricing-v2/types";
 
-type PublicService = {
-  id: string;
-  name: string;
-  model: string;
-  config: ServiceConfig;
-  vatRate: number;
-  rutEligible: boolean;
-};
+type Svc = { id: string; name: string; model: string; config: any; vat_rate: number; rut_eligible: boolean; };
 
 export default function WidgetPage() {
-  const [tenant, setTenant] = useState("8f98ad87-3f30-432d-9b00-f2a7c1c76c63");
-  const [services, setServices] = useState<PublicService[]>([]);
-  const [selId, setSelId] = useState<string>("");
-  const [frequency, setFrequency] = useState<FrequencyKey>("monthly");
-  const [inputs, setInputs] = useState<Record<string, unknown>>({ area: 50 });
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
-  const [quote, setQuote] = useState<QuoteBreakdown | null>(null);
+  const [tenant, setTenant] = useState("demo-tenant");
+  const [services, setServices] = useState<Svc[]>([]);
+  const [sel, setSel] = useState<Svc | null>(null);
+  const [area, setArea] = useState(50);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [frequency, setFrequency] = useState<"one_time"|"weekly"|"biweekly"|"monthly">("monthly");
+  const [quote, setQuote] = useState<any | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [booking, setBooking] = useState<any | null>(null);
 
   useEffect(() => {
     (async () => {
       setNote(null);
-      try {
-        const r = await fetch("/api/public/services", { headers: { "x-tenant-id": tenant }, cache: "no-store" });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j?.error || r.statusText);
-        setServices(j.items ?? []);
-        if (!selId && (j.items?.length ?? 0) > 0) setSelId(j.items[0].id);
-      } catch (e) {
-        setNote(e instanceof Error ? e.message : String(e));
-      }
+      const r = await fetch("/api/public/services", { headers: { "x-tenant-id": tenant }, cache: "no-store" });
+      const j = await r.json();
+      if (r.ok) setServices(j.items || []); else setNote(j?.error || "Load failed");
     })();
-  }, [tenant, selId]);
+  }, [tenant]);
 
-  const sel = useMemo(() => services.find(s => s.id === selId) || null, [services, selId]);
-  const expects = useMemo(() => {
-    type SimpleType = { key: string; name: string };
-    type SimpleBoolMod = { key: string; label: string; condition: { type: "boolean"; when: boolean; answerKey: string } };
-    if (!sel) return { needsArea:false, windowTypes:[] as SimpleType[], roomTypes:[] as SimpleType[], booleanMods:[] as SimpleBoolMod[] };
-    const cfg = sel.config as ServiceConfig;
-    // derive simple shapes for UI
-    const windowTypes: SimpleType[] = cfg.model === "windows" ? cfg.windowTypes.map(w=>({ key:w.key, name:w.name })) : [];
-    const roomTypes: SimpleType[] = cfg.model === "per_room" ? cfg.roomTypes.map(r=>({ key:r.key, name:r.name })) : [];
-    const isBoolMod = (m: unknown): m is SimpleBoolMod => {
-      if (typeof m !== "object" || m === null) return false;
-      const mm = m as Record<string, unknown>;
-      const cond = mm["condition"] as Record<string, unknown> | undefined;
-      return typeof mm["key"] === "string" && typeof mm["label"] === "string" &&
-        cond !== undefined && cond["type"] === "boolean" && typeof cond["answerKey"] === "string" && typeof cond["when"] === "boolean";
-    };
-    const booleanMods: SimpleBoolMod[] = (cfg.modifiers ?? []).filter(isBoolMod);
+  const fields = useMemo(() => {
+    if (!sel) return null as any;
+    const c = sel.config || {};
     return {
       needsArea: ["fixed_tier","tiered_multiplier","universal_multiplier","hourly_area"].includes(sel.model),
-      windowTypes,
-      roomTypes,
-      booleanMods,
+      windowTypes: c?.windowTypes || [],
+      roomTypes: c?.roomTypes || [],
+      booleanMods: (c?.modifiers || []).filter((m: any) => m?.condition?.type === "boolean")
     };
   }, [sel]);
 
   async function runQuote() {
     if (!sel) return;
-  setQuote(null); setNote(null);
-    try {
-      const r = await fetch("/api/public/quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-tenant-id": tenant },
-        body: JSON.stringify({
-          tenant: { currency: "SEK", vat_rate: sel.vatRate ?? 25, rut_enabled: !!sel.rutEligible },
-          service_id: sel.id, frequency, inputs, addons: [], applyRUT: true, coupon: undefined, answers
-        })
-      });
-  const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || r.statusText);
-  setQuote(j as QuoteBreakdown);
-    } catch (e) { setNote(e instanceof Error ? e.message : String(e)); }
+    setQuote(null); setBooking(null); setNote(null);
+    const tenantInfo = { currency: "SEK", vat_rate: sel.vat_rate ?? 25, rut_enabled: !!sel.rut_eligible };
+    const inputs: any = {};
+    if (fields?.needsArea) inputs.area = area;
+    if ((fields?.windowTypes?.length||0) > 0 || (fields?.roomTypes?.length||0) > 0) inputs.counts = counts;
+    const r = await fetch("/api/public/quote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-tenant-id": tenant },
+      body: JSON.stringify({ tenant: tenantInfo, service_id: sel.id, frequency, inputs, answers, addons: [], applyRUT: true })
+    });
+    const j = await r.json();
+    if (!r.ok) setNote(j?.error || "Quote error"); else setQuote(j);
+  }
+
+  async function bookNow() {
+    if (!sel || !quote) return;
+    const body = {
+      service_id: sel.id,
+      frequency,
+      inputs: quote.inputs ?? { area },
+      answers,
+      customer: { name: "Widget Tester", email: "test@example.com", phone: "+46700000000", address: "Street 1" }
+    };
+    const r = await fetch("/api/bookings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-tenant-id": tenant, "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify(body)
+    });
+    const j = await r.json();
+    if (!r.ok) setNote(j?.error || "Booking error"); else setBooking(j);
   }
 
   const invariantOK = useMemo(() => {
     if (!quote) return null;
-  const subtotal = quote.subtotal_ex_vat_minor | 0;
-    const sum = (subtotal|0) + (quote.vat_minor|0) + (quote.rut_minor|0) + (quote.discount_minor|0);
+    const sub = (quote.subtotal_ex_vat_minor ?? quote.subtotal_minor) | 0;
+    const sum = (sub|0) + (quote.vat_minor|0) + (quote.rut_minor|0) + (quote.discount_minor|0);
     return (quote.total_minor|0) === sum;
   }, [quote]);
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-bold">Public Widget</h1>
-
-      <div className="flex items-center gap-2">
-        <span className="text-sm">Tenant</span>
+    <div className="max-w-4xl mx-auto p-6 space-y-4">
+      <h1 className="text-2xl font-bold">Widget</h1>
+      <div className="flex gap-2 items-center">
+        <label className="text-sm">Tenant</label>
         <input className="border rounded px-2 py-1" value={tenant} onChange={e=>setTenant(e.target.value)} />
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm">Service
-          <select className="border rounded px-2 py-1 ml-2" value={selId} onChange={e=>{ setSelId(e.target.value); setQuote(null); }}>
-            <option value="">Select</option>
-            {services.map(s => <option key={s.id} value={s.id}>{s.name} · {s.model}</option>)}
-          </select>
-        </label>
+        <label className="block text-sm font-medium">Service</label>
+        <select className="border rounded px-2 py-2 w-full" value={sel?.id ?? ""} onChange={e=>{
+          const s = services.find(x=>x.id===e.target.value) || null;
+          setSel(s); setQuote(null); setBooking(null); setCounts({});
+        }}>
+          <option value="">Select a service</option>
+          {services.map(s => <option key={s.id} value={s.id}>{s.name} · {s.model}</option>)}
+        </select>
       </div>
 
       {sel && (
-        <div className="space-y-3 border rounded p-4">
+        <div className="space-y-3 border rounded-2xl p-4">
           <div className="grid md:grid-cols-2 gap-3">
             <label className="text-sm">Frequency
-              <select className="border rounded px-2 py-1 ml-2" value={frequency} onChange={e=>setFrequency(e.target.value as FrequencyKey)}>
+              <select className="border rounded px-2 py-1 ml-2" value={frequency} onChange={e=>setFrequency(e.target.value as any)}>
                 <option value="one_time">one_time</option>
                 <option value="weekly">weekly</option>
                 <option value="biweekly">biweekly</option>
                 <option value="monthly">monthly</option>
               </select>
             </label>
-            {expects.needsArea && (
+            {fields?.needsArea && (
               <label className="text-sm">Area (sqm)
-                <input type="number" className="border rounded px-2 py-1 ml-2 w-24" min={0} value={(inputs as Record<string, unknown>).area as number ?? 50}
-                       onChange={e=>setInputs(prev=>({ ...(prev||{}), area: Number(e.target.value||0) }))} />
+                <input type="number" min={0} className="border rounded px-2 py-1 ml-2 w-24"
+                  value={area} onChange={e=>setArea(Number(e.target.value))}/>
               </label>
             )}
           </div>
 
-      {(expects.windowTypes.length>0 || expects.roomTypes.length>0) && (
-            <div className="space-y-2">
-              <div className="font-medium text-sm">Counts</div>
+          {(fields?.windowTypes?.length>0 || fields?.roomTypes?.length>0) && (
+            <div>
+              <div className="font-medium text-sm mb-1">Counts</div>
               <div className="grid md:grid-cols-3 gap-2">
-                {(expects.windowTypes.length ? expects.windowTypes : expects.roomTypes).map((t: { key:string; name:string }) => (
+                {(fields.windowTypes.length ? fields.windowTypes : fields.roomTypes).map((t: any) => (
                   <label key={t.key} className="text-sm flex items-center justify-between gap-2 border rounded px-2 py-1">
                     <span>{t.name}</span>
                     <input type="number" min={0} className="border rounded px-2 py-1 w-24"
-           value={(inputs as Record<string, unknown>)[t.key] as number ?? 0}
-                           onChange={e=>setInputs(prev=>({ ...(prev||{}), [t.key]: Number(e.target.value||0) }))} />
+                      value={counts[t.key] ?? 0}
+                      onChange={e=>setCounts(prev=>({ ...prev, [t.key]: Number(e.target.value) }))}/>
                   </label>
                 ))}
               </div>
             </div>
           )}
 
-          {expects.booleanMods.length>0 && (
-            <div className="space-y-1">
+          {/* boolean answers */}
+          {fields?.booleanMods?.length>0 && (
+            <div>
               <div className="font-medium text-sm">Questions</div>
-              <div className="grid md:grid-cols-3 gap-2">
-        {expects.booleanMods.map((m) => (
+              <div className="grid md:grid-cols-3 gap-2 mt-1">
+                {fields.booleanMods.map((m: any) => (
                   <label key={m.key} className="text-sm flex items-center gap-2 border rounded px-2 py-1">
-                    <input type="checkbox" checked={!!(answers as Record<string, unknown>)[m.condition?.answerKey]}
-                           onChange={e=>setAnswers(prev=>({ ...(prev||{}), [m.condition.answerKey]: e.target.checked }))} />
+                    <input type="checkbox"
+                      checked={!!answers[m.condition?.answerKey]}
+                      onChange={e=>setAnswers(prev=>({ ...prev, [m.condition.answerKey]: e.target.checked }))}/>
                     <span>{m.label}</span>
                   </label>
                 ))}
@@ -155,7 +148,8 @@ export default function WidgetPage() {
           )}
 
           <div className="flex gap-2">
-            <button onClick={runQuote} className="px-4 py-2 rounded bg-black text-white">Get Quote</button>
+            <button onClick={runQuote} className="px-4 py-2 rounded-2xl bg-black text-white">Get Quote</button>
+            {quote && <button onClick={bookNow} className="px-4 py-2 rounded-2xl bg-emerald-600 text-white">Book</button>}
           </div>
 
           {note && <div className="text-sm text-red-600">{note}</div>}
@@ -164,6 +158,13 @@ export default function WidgetPage() {
             <div className="text-sm mt-3">
               <div>status: 200 · invariant: {invariantOK ? "✅" : "❌"}</div>
               <pre className="text-xs bg-gray-50 p-2 rounded mt-2 overflow-auto max-h-64">{JSON.stringify(quote, null, 2)}</pre>
+            </div>
+          )}
+
+          {booking && (
+            <div className="text-sm mt-3">
+              <div className="font-medium">Booking created</div>
+              <pre className="text-xs bg-gray-50 p-2 rounded mt-2 overflow-auto">{JSON.stringify(booking, null, 2)}</pre>
             </div>
           )}
         </div>
