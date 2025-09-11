@@ -114,7 +114,7 @@ async function previewQuote(tenantId: string, state: FormState, inputs: Record<s
 }
 
 export default function ServiceBuilderV2Page() {
-  const [tenant, setTenant] = useState("demo-tenant");
+  const [tenant] = useState("demo-tenant");
   const [state, setState] = useState<FormState>({
     name: "Hourly demo",
     model: "hourly_area",
@@ -146,7 +146,8 @@ export default function ServiceBuilderV2Page() {
       const j = await previewQuote(tenant, state, inputs, answers);
       setPreview(j);
     } catch (e) {
-      setPreview(null); setErr(e);
+      setPreview(null); 
+      setErr(e as Record<string, unknown>);
     }
   }
 
