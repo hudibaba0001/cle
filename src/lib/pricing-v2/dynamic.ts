@@ -1,41 +1,60 @@
 import { ServiceConfig, ModifierRule } from "./types";
 
-type AnyService = ServiceConfig & Record<string, unknown>;
+export type PriceEffect = {
+  target: "base_after_frequency" | "subtotal_before_modifiers";
+  mode: "percent" | "fixed";
+  value: number;
+  direction: "increase" | "decrease";
+  rutEligible?: boolean;
+  label?: string;
+};
 
-export function getFrequencyMultiplier(service: AnyService, requested?: string): number {
+export type FrequencyOption = { key: string; label: string; multiplier: number };
+export type CheckboxQ = { type: "checkbox"; key: string; label: string; required?: boolean; impact?: PriceEffect };
+export type RadioQ = { type: "radio"; key: string; label: string; required?: boolean; options: Array<{ value: string; label: string; impact?: PriceEffect }> };
+export type CheckboxMultiQ = { type: "checkbox_multi"; key: string; label: string; required?: boolean; options: Array<{ value: string; label: string; impact?: PriceEffect }> };
+export type TextQ = { type: "text"; key: string; label: string; required?: boolean; pattern?: string };
+export type DynamicQuestion = CheckboxQ | RadioQ | CheckboxMultiQ | TextQ;
+
+export type ServiceWithDynamic = ServiceConfig & {
+  frequencyOptions?: FrequencyOption[];
+  dynamicQuestions?: DynamicQuestion[];
+};
+
+export function getFrequencyMultiplier(service: ServiceWithDynamic, requested?: string): number {
   const builtIn = (service.frequencyMultipliers ?? { one_time: 1, weekly: 1, biweekly: 1.15, monthly: 1.4 }) as Record<string, number>;
   if (!requested) return builtIn.one_time ?? 1;
   if (requested in builtIn) return builtIn[requested] ?? 1;
-  const customs = (service as any).frequencyOptions as Array<{ key: string; label: string; multiplier: number }> | undefined;
+  const customs = service.frequencyOptions;
   const hit = customs?.find(o => o.key === requested);
   const m = hit?.multiplier;
   return typeof m === "number" && m >= 1 ? m : 1;
 }
 
 // Expand answers for radio/checkbox-multi to boolean flags that engine boolean conditions can consume
-export function expandAnswersForDynamic(service: AnyService, answers: Record<string, unknown>): Record<string, unknown> {
+export function expandAnswersForDynamic(service: ServiceWithDynamic, answers: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...(answers || {}) };
-  const dynQs = (service as any).dynamicQuestions as Array<any> | undefined;
+  const dynQs = service.dynamicQuestions;
   if (!Array.isArray(dynQs)) return out;
   for (const q of dynQs) {
-    const a = (answers as any)?.[q?.key];
-    if (q?.type === "radio" && Array.isArray(q?.options)) {
+    const a = (answers as Record<string, unknown>)[q.key];
+    if (q.type === "radio") {
       for (const opt of q.options) out[`${q.key}__is__${opt.value}`] = a === opt.value;
-    } else if (q?.type === "checkbox_multi" && Array.isArray(q?.options)) {
-      const arr = Array.isArray(a) ? a : [];
+    } else if (q.type === "checkbox_multi") {
+      const arr = Array.isArray(a) ? (a as unknown[]) : [];
       for (const opt of q.options) out[`${q.key}__has__${opt.value}`] = arr.includes(opt.value);
     }
   }
   return out;
 }
 
-export function compileDynamicToModifiers(service: AnyService): ModifierRule[] {
+export function compileDynamicToModifiers(service: ServiceWithDynamic): ModifierRule[] {
   const mods: ModifierRule[] = [];
-  const dynQs = (service as any).dynamicQuestions as Array<any> | undefined;
+  const dynQs = service.dynamicQuestions;
   if (!Array.isArray(dynQs)) return mods;
 
   for (const q of dynQs) {
-    if (q?.type === "checkbox" && q?.impact) {
+    if (q.type === "checkbox" && q.impact) {
       mods.push({
         key: `dyn_${q.key}`,
         label: q.label || q.key,
@@ -44,9 +63,9 @@ export function compileDynamicToModifiers(service: AnyService): ModifierRule[] {
       });
       continue;
     }
-    if ((q?.type === "radio" || q?.type === "checkbox_multi") && Array.isArray(q?.options)) {
+    if (q.type === "radio" || q.type === "checkbox_multi") {
       for (const opt of q.options) {
-        if (!opt?.impact) continue;
+        if (!opt.impact) continue;
         const answerKey = q.type === "radio" ? `${q.key}__is__${opt.value}` : `${q.key}__has__${opt.value}`;
         mods.push({
           key: `dyn_${q.key}_${opt.value}`,
