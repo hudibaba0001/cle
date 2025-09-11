@@ -41,10 +41,10 @@ export async function POST(req: NextRequest) {
   if (error || !svc) return NextResponse.json({ error: "SERVICE_NOT_FOUND" }, { status: 404 });
 
   const rawService = svc.config as ServiceConfig;
-  const dyn = compileDynamicToModifiers(rawService as any);
-  const mergedService = { ...(rawService as any), modifiers: [ ...(rawService.modifiers ?? []), ...dyn ] } as ServiceConfig;
-  const freqMul = getFrequencyMultiplier(mergedService as any, body.frequency as any);
-  const answersOverride = expandAnswersForDynamic(mergedService as any, body.answers as Record<string, unknown>);
+  const dyn = compileDynamicToModifiers(rawService);
+  const mergedService = { ...(rawService as ServiceConfig), modifiers: [ ...(rawService.modifiers ?? []), ...dyn ] } as ServiceConfig;
+  const freqMul = getFrequencyMultiplier(mergedService, body.frequency);
+  const answersOverride = expandAnswersForDynamic(mergedService, body.answers as Record<string, unknown>);
 
   // Server-side pricing using stored config prevents client tampering
   const quote = computeQuoteV2({

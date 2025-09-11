@@ -81,7 +81,7 @@ export function compileDynamicToModifiers(service: ServiceWithDynamic): Modifier
 
 export function coerceFrequencyToBuiltin(requested?: string): "one_time" | "weekly" | "biweekly" | "monthly" {
   const allowed = new Set(["one_time", "weekly", "biweekly", "monthly"]);
-  return (requested && allowed.has(requested)) ? (requested as any) : "one_time";
+  return (requested && allowed.has(requested)) ? (requested as "one_time" | "weekly" | "biweekly" | "monthly") : "one_time";
 }
 
 

@@ -12,10 +12,10 @@ export async function POST(req: NextRequest) {
     const json = await req.json();
     const parsed = QuoteRequestSchema.parse(json);
     // Merge compiled dynamic modifiers into the service modifiers
-    const dyn = compileDynamicToModifiers(parsed.service as ServiceConfig as any);
-    const mergedService = { ...(parsed.service as any), modifiers: [ ...(parsed.service.modifiers ?? []), ...dyn ] } as ServiceConfig;
-    const freqMul = getFrequencyMultiplier(mergedService as any, parsed.frequency as any);
-    const answersOverride = expandAnswersForDynamic(mergedService as any, (parsed as any).answers ?? {});
+    const dyn = compileDynamicToModifiers(parsed.service as ServiceConfig);
+    const mergedService = { ...(parsed.service as ServiceConfig), modifiers: [ ...(parsed.service.modifiers ?? []), ...dyn ] } as ServiceConfig;
+    const freqMul = getFrequencyMultiplier(mergedService, parsed.frequency);
+    const answersOverride = expandAnswersForDynamic(mergedService, (parsed as unknown as { answers?: Record<string, unknown> }).answers ?? {});
     const res = computeQuoteV2({ ...parsed, service: mergedService }, { frequencyMultiplierOverride: freqMul, answersOverride });
     return NextResponse.json(res, { status: 200 });
   } catch (err: unknown) {
