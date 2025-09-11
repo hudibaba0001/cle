@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+  "lint": "eslint",
+  "db:push": "supabase db push",
+  "db:status": "supabase status || supabase projects list"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
