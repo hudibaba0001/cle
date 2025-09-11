@@ -132,7 +132,7 @@ export default function WidgetPage() {
           )}
 
           {/* boolean answers */}
-          {fields?.booleanMods?.length>0 && (
+          {(fields?.booleanMods?.length || 0) > 0 && (
             <div>
               <div className="font-medium text-sm">Questions</div>
               <div className="grid md:grid-cols-3 gap-2 mt-1">
