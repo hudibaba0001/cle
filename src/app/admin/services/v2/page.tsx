@@ -19,8 +19,8 @@ type ModifierUI = {
 
 type FormState = {
   name: string;
-  model: Model;             // <-- ensure this exact key & enum
-    vatRate: number;
+  model: Model;
+  vatRate: number;
   rutEligible: boolean;
   minimum?: number;
   frequencyMultipliers: { one_time: number; weekly: number; biweekly: number; monthly: number };
@@ -76,17 +76,17 @@ function buildServiceConfig(s: FormState) {
   // per-model specifics
   switch (s.model) {
     case "fixed_tier":
-      return { ...base, tiers: s.fixedTiers };
+      return { ...base, fixed_tier: { tiers: s.fixedTiers } };
     case "tiered_multiplier":
-      return { ...base, tiers: s.rateTiers };
+      return { ...base, tiered_multiplier: { rateTiers: s.rateTiers } };
     case "universal_multiplier":
-      return { ...base, ratePerSqm: Number(s.ratePerSqm || 0) };
+      return { ...base, universal_multiplier: { ratePerSqm: Number(s.ratePerSqm || 0) } };
     case "windows":
-      return { ...base, windowTypes: s.windowTypes };
+      return { ...base, windows: { types: s.windowTypes } };
     case "per_room":
-      return { ...base, roomTypes: s.roomTypes };
+      return { ...base, per_room: { rooms: s.roomTypes } };
     case "hourly_area":
-      return { ...base, areaToHours: [{ min: 0, max: 1000, hours: Number(s.hoursPerSqm || 0.1) }], hourlyRate: Number(s.ratePerHour || 0) };
+      return { ...base, hourly_area: { hoursPerSqm: Number(s.hoursPerSqm || 0.1), ratePerHour: Number(s.ratePerHour || 0) } };
   }
 }
 
@@ -132,10 +132,88 @@ export default function ServiceBuilderV2Page() {
 
   const inputs = useMemo(() => {
     // minimal form → inputs inference, adjust per model
-    if (state.model === "windows") return { counts: Object.fromEntries(state.windowTypes.map(t => [t.key, 1])) };
-    if (state.model === "per_room") return { counts: Object.fromEntries(state.roomTypes.map(t => [t.key, 1])) };
+    if (state.model === "windows") return { counts: Object.fromEntries(state.windowTypes.map((t, i) => [t.key || `window_${i}`, 1])) };
+    if (state.model === "per_room") return { counts: Object.fromEntries(state.roomTypes.map((t, i) => [t.key || `room_${i}`, 1])) };
     return { area: 50 }; // default for area-based models
   }, [state]);
+
+  // Array management helpers
+  const addTier = (type: 'fixed' | 'tiered') => {
+    const newTier = type === 'fixed' 
+      ? { min: 0, max: 100, price: 500 }
+      : { min: 0, max: 100, ratePerSqm: 25 };
+    setState(s => ({
+      ...s,
+      [type === 'fixed' ? 'fixedTiers' : 'rateTiers']: [
+        ...(type === 'fixed' ? s.fixedTiers : s.rateTiers),
+        newTier
+      ]
+    }));
+  };
+
+  const removeTier = (index: number, type: 'fixed' | 'tiered') => {
+    setState(s => ({
+      ...s,
+      [type === 'fixed' ? 'fixedTiers' : 'rateTiers']: 
+        (type === 'fixed' ? s.fixedTiers : s.rateTiers).filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateTier = (index: number, field: string, value: number, type: 'fixed' | 'tiered') => {
+    setState(s => ({
+      ...s,
+      [type === 'fixed' ? 'fixedTiers' : 'rateTiers']: 
+        (type === 'fixed' ? s.fixedTiers : s.rateTiers).map((t, i) => 
+          i === index ? { ...t, [field]: value } : t
+        )
+    }));
+  };
+
+  const addWindowType = () => {
+    setState(s => ({
+      ...s,
+      windowTypes: [...s.windowTypes, { key: `window_${s.windowTypes.length}`, name: '', pricePerUnit: 0 }]
+    }));
+  };
+
+  const removeWindowType = (index: number) => {
+    setState(s => ({
+      ...s,
+      windowTypes: s.windowTypes.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateWindowType = (index: number, field: string, value: string | number) => {
+    setState(s => ({
+      ...s,
+      windowTypes: s.windowTypes.map((t, i) => 
+        i === index ? { ...t, [field]: value } : t
+      )
+    }));
+  };
+
+  const addRoomType = () => {
+    setState(s => ({
+      ...s,
+      roomTypes: [...s.roomTypes, { key: `room_${s.roomTypes.length}`, name: '', pricePerUnit: 0 }]
+    }));
+  };
+
+  const removeRoomType = (index: number) => {
+    setState(s => ({
+      ...s,
+      roomTypes: s.roomTypes.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateRoomType = (index: number, field: string, value: string | number) => {
+    setState(s => ({
+      ...s,
+      roomTypes: s.roomTypes.map((t, i) => 
+        i === index ? { ...t, [field]: value } : t
+      )
+    }));
+  };
 
   async function onPreview() {
     try {
