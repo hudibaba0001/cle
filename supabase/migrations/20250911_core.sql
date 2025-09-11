@@ -16,9 +16,26 @@ create table if not exists public.services (
   updated_at timestamptz not null default now()
 );
 
--- If an earlier migration created tenant_id as uuid, convert to text for consistent header matching
+-- If an earlier migration created services with a uuid tenant_id and FK to tenants, drop FK and convert to text
 do $$
+declare
+  fk_name text;
 begin
+  -- find a FK on services(tenant_id) if it exists
+  select tc.constraint_name into fk_name
+  from information_schema.table_constraints tc
+  join information_schema.key_column_usage kcu
+    on tc.constraint_name = kcu.constraint_name
+  where tc.table_schema = 'public'
+    and tc.table_name = 'services'
+    and tc.constraint_type = 'FOREIGN KEY'
+    and kcu.column_name = 'tenant_id'
+  limit 1;
+
+  if fk_name is not null then
+    execute format('alter table public.services drop constraint %I', fk_name);
+  end if;
+
   if exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'services' and column_name = 'tenant_id' and data_type = 'uuid'
@@ -26,6 +43,13 @@ begin
     alter table public.services alter column tenant_id type text using tenant_id::text;
   end if;
 end $$;
+
+-- Backfill/align columns expected by v2 (safe if already present)
+alter table public.services add column if not exists slug text;
+alter table public.services add column if not exists active boolean not null default true;
+alter table public.services add column if not exists vat_rate int not null default 25;
+alter table public.services add column if not exists rut_eligible boolean not null default false;
+-- model/config/created_at/updated_at typically already exist from older schema
 
 create unique index if not exists services_tenant_slug_uk on public.services(tenant_id, slug);
 create index if not exists services_tenant_active_idx on public.services(tenant_id, active);
