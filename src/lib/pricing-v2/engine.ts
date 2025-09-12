@@ -5,7 +5,10 @@ const fromMinor = (m:number)=>m/100;
 const clampMinor = (m:number)=>Math.max(0, Math.round(m));
 const pct = (v:number)=>Math.max(0, Math.min(100, v));
 
-function applyFrequency(base:number, fm:Record<string,number>|undefined, fkey:string){ return (fm?.[fkey] ?? 1) * base; }
+function applyFrequency(base:number, fm:Record<string,number>|undefined, fkey?:string){
+  const mul = fkey ? fm?.[fkey] : undefined;
+  return (typeof mul === "number" ? mul : 1) * base;
+}
 
 // PDF-compliant base calculators (pre-frequency)
 function baseForModel(svc: ServiceConfig, inputs: QuoteRequest["inputs"]): number {

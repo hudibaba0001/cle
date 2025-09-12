@@ -18,9 +18,7 @@ const ModifierEffectSchema = z.object({
   label: z.string().min(1),
 });
 
-const ModifierConditionSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("boolean"), when: z.boolean(), answerKey: z.string().min(1) }),
-]);
+// Inline modifier condition validation is handled in engine types; keep no standalone symbol to avoid unused var
 
 // Shape kept inline where needed; no top-level export to avoid unused symbol
 
