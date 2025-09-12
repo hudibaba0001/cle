@@ -84,4 +84,30 @@ export function coerceFrequencyToBuiltin(requested?: string): "one_time" | "week
   return (requested && allowed.has(requested)) ? (requested as "one_time" | "weekly" | "biweekly" | "monthly") : "one_time";
 }
 
+export function listAllowedFrequencyKeys(service: ServiceWithDynamic): string[] {
+  const builtins = ["one_time", "weekly", "biweekly", "monthly"];
+  const customs = (service.frequencyOptions ?? []).map(o => o.key);
+  return [...builtins, ...customs];
+}
+
+export class UnknownFrequencyError extends Error {
+  allowed: string[];
+  constructor(allowed: string[]) {
+    super("UNKNOWN_FREQUENCY");
+    this.allowed = allowed;
+  }
+}
+
+export function resolveFrequencyKeyOrThrow(service: ServiceWithDynamic, key?: string): number {
+  const builtIn = (service.frequencyMultipliers ?? { one_time: 1, weekly: 1, biweekly: 1.15, monthly: 1.4 }) as Record<string, number>;
+  if (!key) return builtIn.one_time ?? 1;
+  if (key in builtIn) {
+    const v = builtIn[key] ?? 1;
+    if (typeof v === "number" && v >= 1) return v;
+  }
+  const hit = (service.frequencyOptions ?? []).find(o => o.key === key);
+  if (hit && typeof hit.multiplier === "number" && hit.multiplier >= 1) return hit.multiplier;
+  throw new UnknownFrequencyError(listAllowedFrequencyKeys(service));
+}
+
 

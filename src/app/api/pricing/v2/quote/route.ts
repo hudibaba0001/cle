@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { computeQuoteV2 } from "@/lib/pricing-v2/engine";
 import { QuoteRequestSchema, ServiceConfig } from "@/lib/pricing-v2/types";
-import { getFrequencyMultiplier, compileDynamicToModifiers, expandAnswersForDynamic } from "@/lib/pricing-v2/dynamic";
+import { compileDynamicToModifiers, expandAnswersForDynamic, resolveFrequencyKeyOrThrow, UnknownFrequencyError, listAllowedFrequencyKeys } from "@/lib/pricing-v2/dynamic";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +14,15 @@ export async function POST(req: NextRequest) {
     // Merge compiled dynamic modifiers into the service modifiers
     const dyn = compileDynamicToModifiers(parsed.service as ServiceConfig);
     const mergedService = { ...(parsed.service as ServiceConfig), modifiers: [ ...(parsed.service.modifiers ?? []), ...dyn ] } as ServiceConfig;
-    const freqMul = getFrequencyMultiplier(mergedService, parsed.frequency);
+    let freqMul: number;
+    try {
+      freqMul = resolveFrequencyKeyOrThrow(mergedService, parsed.frequency as string | undefined);
+    } catch (e: unknown) {
+      if (e instanceof UnknownFrequencyError) {
+        return NextResponse.json({ error: "UNKNOWN_FREQUENCY", allowed: listAllowedFrequencyKeys(mergedService) }, { status: 400 });
+      }
+      throw e;
+    }
     const answersOverride = expandAnswersForDynamic(mergedService, (parsed as unknown as { answers?: Record<string, unknown> }).answers ?? {});
     const res = computeQuoteV2({ ...parsed, service: mergedService }, { frequencyMultiplierOverride: freqMul, answersOverride });
     return NextResponse.json(res, { status: 200 });

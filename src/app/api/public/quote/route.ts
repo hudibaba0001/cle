@@ -3,7 +3,7 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { computeQuoteV2 } from "@/lib/pricing-v2/engine";
 import { FrequencyKey, QuoteRequest, ServiceConfig } from "@/lib/pricing-v2/types";
-import { getFrequencyMultiplier, compileDynamicToModifiers, expandAnswersForDynamic } from "@/lib/pricing-v2/dynamic";
+import { compileDynamicToModifiers, expandAnswersForDynamic, resolveFrequencyKeyOrThrow, UnknownFrequencyError, listAllowedFrequencyKeys } from "@/lib/pricing-v2/dynamic";
 // removed unused import
 
 const Body = z.object({
@@ -13,7 +13,8 @@ const Body = z.object({
     rut_enabled: z.boolean().default(false),
   }),
   service_id: z.string().uuid(),
-  frequency: FrequencyKey.default("one_time"),
+  // accept arbitrary key and resolve after loading service
+  frequency: z.string().optional(),
   inputs: z.record(z.string(), z.unknown()).default({}),
   addons: z.array(z.object({ key: z.string(), quantity: z.number().int().positive().optional() })).default([]),
   applyRUT: z.boolean().default(false),
@@ -43,14 +44,22 @@ export async function POST(req: NextRequest) {
   const rawService = svc.config as ServiceConfig;
   const dyn = compileDynamicToModifiers(rawService);
   const mergedService = { ...(rawService as ServiceConfig), modifiers: [ ...(rawService.modifiers ?? []), ...dyn ] } as ServiceConfig;
-  const freqMul = getFrequencyMultiplier(mergedService, body.frequency);
+  let freqMul: number;
+  try {
+    freqMul = resolveFrequencyKeyOrThrow(mergedService, body.frequency);
+  } catch (e: unknown) {
+    if (e instanceof UnknownFrequencyError) {
+      return NextResponse.json({ error: "UNKNOWN_FREQUENCY", allowed: listAllowedFrequencyKeys(mergedService) }, { status: 400 });
+    }
+    throw e;
+  }
   const answersOverride = expandAnswersForDynamic(mergedService, body.answers as Record<string, unknown>);
 
   // Server-side pricing using stored config prevents client tampering
   const quote = computeQuoteV2({
     tenant: body.tenant,
     service: mergedService,
-    frequency: body.frequency,
+    frequency: (body.frequency as any) ?? "one_time",
     inputs: body.inputs as QuoteRequest["inputs"],
     addons: body.addons,
     applyRUT: body.applyRUT,

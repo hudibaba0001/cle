@@ -149,7 +149,8 @@ export const QuoteRequestSchema = z.object({
     rut_enabled: z.boolean().default(false),
   }),
   service: ServiceConfig,
-  frequency: FrequencyKey.default("one_time"),
+  // Accept arbitrary key; routes resolve to multiplier or return error
+  frequency: z.string().optional(),
   inputs: QuoteInputs.default({}),
   addons: z.array(QuoteAddonInput).default([]),
   applyRUT: z.boolean().default(false),
