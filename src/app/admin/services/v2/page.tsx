@@ -693,11 +693,11 @@ export default function ServiceBuilderV2Page() {
           <div className="mb-6">
             <div className="mb-2 font-medium">Frequency Multipliers</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {["one_time","weekly","biweekly","monthly"].map(k => (
+              {(["one_time","weekly","biweekly","monthly"] as const).map(k => (
                 <label key={k} className="text-sm">
-                  <div className="mb-1">{String(k).replace('_',' ')}</div>
-                  <input type="number" step="0.01" className="border rounded px-2 py-1 w-full" value={state.frequencyMultipliers[k as keyof typeof state.frequencyMultipliers]}
-                    onChange={e=>setState(s=>({ ...s, frequencyMultipliers: { ...s.frequencyMultipliers, [k]: Number(e.target.value) } as any }))}/>
+                  <div className="mb-1">{k.replace('_',' ')}</div>
+                  <input type="number" step="0.01" className="border rounded px-2 py-1 w-full" value={state.frequencyMultipliers[k]}
+                    onChange={e=>setState(s=>{ const fm = { ...s.frequencyMultipliers }; fm[k] = Number(e.target.value); return { ...s, frequencyMultipliers: fm }; })}/>
                   </label>
               ))}
             </div>
@@ -737,9 +737,9 @@ export default function ServiceBuilderV2Page() {
                 <div key={`${q.type}_${q.key}_${i}`} className="border rounded p-3">
                   <div className="grid grid-cols-6 gap-2 items-center mb-2">
                     <select className="border rounded px-2 py-1" value={q.type} onChange={e=>{
-                      const t = e.target.value as any; 
-                      const base = { key: (q as any).key, label: (q as any).label } as any;
-                      const next: any = t === 'checkbox' ? { type:'checkbox', ...base } : t === 'radio' ? { type:'radio', ...base, options: [] } : t === 'checkbox_multi' ? { type:'checkbox_multi', ...base, options: [] } : { type:'text', ...base };
+                      const t = e.target.value as DynQuestionUI["type"]; 
+                      const base = { key: q.key, label: q.label } as { key: string; label: string };
+                      const next: DynQuestionUI = t === 'checkbox' ? { type:'checkbox', ...base } : t === 'radio' ? { type:'radio', ...base, options: [] } : t === 'checkbox_multi' ? { type:'checkbox_multi', ...base, options: [] } : { type:'text', ...base };
                       updateDynQuestion(i, next);
                     }}>
                       <option value="checkbox">checkbox</option>
@@ -747,74 +747,74 @@ export default function ServiceBuilderV2Page() {
                       <option value="checkbox_multi">checkbox_multi</option>
                       <option value="text">text</option>
                     </select>
-                    <input className="border rounded px-2 py-1" placeholder="Key" value={(q as any).key} onChange={e=>updateDynQuestion(i, { ...q, key: e.target.value } as any)} />
-                    <input className="border rounded px-2 py-1 col-span-3" placeholder="Label" value={(q as any).label} onChange={e=>updateDynQuestion(i, { ...q, label: e.target.value } as any)} />
+                    <input className="border rounded px-2 py-1" placeholder="Key" value={q.key} onChange={e=>updateDynQuestion(i, { ...q, key: e.target.value } as DynQuestionUI)} />
+                    <input className="border rounded px-2 py-1 col-span-3" placeholder="Label" value={q.label} onChange={e=>updateDynQuestion(i, { ...q, label: e.target.value } as DynQuestionUI)} />
                     <button onClick={()=>removeDynQuestion(i)} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Remove</button>
                   </div>
 
                   {/* Impacts / options */}
-                  {(q as any).type === 'checkbox' && (
+                  {q.type === 'checkbox' && (
                     <div className="grid grid-cols-6 gap-2 items-center">
-                      <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!((q as any).impact?.enabled ?? true)} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? { targetUI:'subtotal', mode:'percent', value:10, direction:'increase' }), enabled: e.target.checked } })} /> Enable impact</label>
-                      <select className="border rounded px-2 py-1" value={((q as any).impact?.targetUI ?? 'subtotal')} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), targetUI: e.target.value as any } })}>
+                      <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={(q.impact?.enabled ?? true)} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? { targetUI:'subtotal', mode:'percent', value:10, direction:'increase' }), enabled: e.target.checked } } as DynQuestionUI)} /> Enable impact</label>
+                      <select className="border rounded px-2 py-1" value={q.impact?.targetUI ?? 'subtotal'} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), targetUI: e.target.value as DynImpactUI['targetUI'] } } as DynQuestionUI)}>
                         <option value="subtotal">Subtotal</option>
                         <option value="base">Base after frequency</option>
                       </select>
-                      <select className="border rounded px-2 py-1" value={((q as any).impact?.mode ?? 'percent')} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), mode: e.target.value as any } })}>
+                      <select className="border rounded px-2 py-1" value={q.impact?.mode ?? 'percent'} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), mode: e.target.value as DynImpactUI['mode'] } } as DynQuestionUI)}>
                         <option value="percent">Percent</option>
                         <option value="fixed">Fixed</option>
                       </select>
-                      <input type="number" className="border rounded px-2 py-1" placeholder="Value" value={((q as any).impact?.value ?? 0)} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), value: Number(e.target.value) } })} />
-                      <select className="border rounded px-2 py-1" value={((q as any).impact?.direction ?? 'increase')} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), direction: e.target.value as any } })}>
+                      <input type="number" className="border rounded px-2 py-1" placeholder="Value" value={q.impact?.value ?? 0} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), value: Number(e.target.value) } } as DynQuestionUI)} />
+                      <select className="border rounded px-2 py-1" value={q.impact?.direction ?? 'increase'} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), direction: e.target.value as DynImpactUI['direction'] } } as DynQuestionUI)}>
                         <option value="increase">Increase</option>
                         <option value="decrease">Decrease</option>
                       </select>
-                      <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!(q as any).impact?.rutEligible} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), rutEligible: e.target.checked } })} /> RUT</label>
-                      <input className="border rounded px-2 py-1 col-span-6" placeholder="Impact label (optional)" value={((q as any).impact?.label ?? '')} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), label: e.target.value } })} />
+                      <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!q.impact?.rutEligible} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), rutEligible: e.target.checked } } as DynQuestionUI)} /> RUT</label>
+                      <input className="border rounded px-2 py-1 col-span-6" placeholder="Impact label (optional)" value={q.impact?.label ?? ''} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), label: e.target.value } } as DynQuestionUI)} />
                     </div>
                   )}
 
-                  {(q as any).type !== 'checkbox' && 'options' in (q as any) && (
+                  {q.type !== 'checkbox' && 'options' in q && (
                     <div className="space-y-2">
-                      {(((q as any).options ?? []) as any[]).map((opt, oi) => (
+                      {(q.options ?? []).map((opt, oi) => (
                         <div key={oi} className="grid grid-cols-6 gap-2 items-center">
                           <input className="border rounded px-2 py-1" placeholder="Value" value={opt.value} onChange={e=>{
-                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, value: e.target.value } : o) } as any; updateDynQuestion(i, next);
+                            const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, value: e.target.value } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }} />
                           <input className="border rounded px-2 py-1 col-span-2" placeholder="Label" value={opt.label} onChange={e=>{
-                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, label: e.target.value } : o) } as any; updateDynQuestion(i, next);
+                            const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, label: e.target.value } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }} />
-                          <select className="border rounded px-2 py-1" value={(opt.impact?.targetUI ?? 'subtotal')} onChange={e=>{
-                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), targetUI: e.target.value as any } } : o) } as any; updateDynQuestion(i, next);
+                          <select className="border rounded px-2 py-1" value={opt.impact?.targetUI ?? 'subtotal'} onChange={e=>{
+                            const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), targetUI: e.target.value as DynImpactUI['targetUI'] } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }}>
                             <option value="subtotal">Subtotal</option>
                             <option value="base">Base after frequency</option>
                           </select>
-                          <select className="border rounded px-2 py-1" value={(opt.impact?.mode ?? 'percent')} onChange={e=>{
-                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), mode: e.target.value as any } } : o) } as any; updateDynQuestion(i, next);
+                          <select className="border rounded px-2 py-1" value={opt.impact?.mode ?? 'percent'} onChange={e=>{
+                            const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), mode: e.target.value as DynImpactUI['mode'] } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }}>
                             <option value="percent">Percent</option>
                             <option value="fixed">Fixed</option>
                           </select>
-                          <input type="number" className="border rounded px-2 py-1" placeholder="Value" value={(opt.impact?.value ?? 0)} onChange={e=>{
-                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), value: Number(e.target.value) } } : o) } as any; updateDynQuestion(i, next);
+                          <input type="number" className="border rounded px-2 py-1" placeholder="Value" value={opt.impact?.value ?? 0} onChange={e=>{
+                            const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), value: Number(e.target.value) } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }} />
-                          <select className="border rounded px-2 py-1" value={(opt.impact?.direction ?? 'increase')} onChange={e=>{
-                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), direction: e.target.value as any } } : o) } as any; updateDynQuestion(i, next);
+                          <select className="border rounded px-2 py-1" value={opt.impact?.direction ?? 'increase'} onChange={e=>{
+                            const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), direction: e.target.value as DynImpactUI['direction'] } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }}>
                             <option value="increase">Increase</option>
                             <option value="decrease">Decrease</option>
                       </select>
                           <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!opt.impact?.rutEligible} onChange={e=>{
-                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), rutEligible: e.target.checked } } : o) } as any; updateDynQuestion(i, next);
+                            const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), rutEligible: e.target.checked } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }} /> RUT</label>
-                          <input className="border rounded px-2 py-1 col-span-6" placeholder="Impact label (optional)" value={(opt.impact?.label ?? '')} onChange={e=>{
-                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), label: e.target.value } } : o) } as any; updateDynQuestion(i, next);
+                          <input className="border rounded px-2 py-1 col-span-6" placeholder="Impact label (optional)" value={opt.impact?.label ?? ''} onChange={e=>{
+                            const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), label: e.target.value } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }} />
                         </div>
                       ))}
                       <button className="px-2 py-1 bg-blue-500 text-white rounded text-sm" onClick={()=>{
-                        const next = { ...(q as any), options: ([...((q as any).options ?? []), { value: '', label: '' }]) } as any; updateDynQuestion(i, next);
+                        const next = { ...q, options: ([...(q.options ?? []), { value: '', label: '' }]) } as DynQuestionUI; updateDynQuestion(i, next);
                       }}>Add Option</button>
                   </div>
                   )}
