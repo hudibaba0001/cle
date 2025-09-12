@@ -3,18 +3,23 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { log } from "@/lib/log";
 import { computeQuoteV2 } from "@/lib/pricing-v2/engine";
-import { FrequencyKey, ServiceConfig } from "@/lib/pricing-v2/types";
+import { ServiceConfig } from "@/lib/pricing-v2/types";
+import { compileDynamicToModifiers, expandAnswersForDynamic, resolveFrequencyKeyOrThrow, UnknownFrequencyError, listAllowedFrequencyKeys } from "@/lib/pricing-v2/dynamic";
 
 const CreateBookingSchema = z.object({
   service_id: z.string().uuid(),
-  frequency: FrequencyKey.default("one_time"),
+  frequency: z.string().optional(),
   inputs: z.record(z.string(), z.unknown()).default({}),
   answers: z.record(z.string(), z.unknown()).default({}),
   customer: z.object({
     name: z.string().min(1),
     email: z.string().email(),
     phone: z.string().min(1),
-    address: z.string().min(1)
+    address: z.object({
+      street: z.string().min(1),
+      city: z.string().min(1),
+      postal_code: z.string().min(3),
+    })
   })
 });
 
@@ -28,7 +33,7 @@ export async function POST(req: NextRequest) {
   }
   
   // Idempotency is mandatory for booking creation
-  const idemRaw = req.headers.get("idempotency-key");
+  const idemRaw = req.headers.get("Idempotency-Key") ?? req.headers.get("idempotency-key");
   const idem = idemRaw ? idemRaw.trim() : "";
   if (!idem) {
     return NextResponse.json({ error: "IDEMPOTENCY_KEY_REQUIRED" }, { status: 400 });
@@ -58,6 +63,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "SERVICE_NOT_FOUND" }, { status: 404 });
     }
 
+    // Prepare service config with dynamic modifiers and resolve frequency
+    const rawService = service.config as ServiceConfig;
+    const dyn = compileDynamicToModifiers(rawService);
+    const mergedService = { ...(rawService as ServiceConfig), modifiers: [ ...(rawService.modifiers ?? []), ...dyn ] } as ServiceConfig;
+    let freqMul: number;
+    try {
+      freqMul = resolveFrequencyKeyOrThrow(mergedService, frequency);
+    } catch (e: unknown) {
+      if (e instanceof UnknownFrequencyError) {
+        return NextResponse.json({ error: "UNKNOWN_FREQUENCY", allowed: listAllowedFrequencyKeys(mergedService) }, { status: 400 });
+      }
+      throw e;
+    }
+    const answersOverride = expandAnswersForDynamic(mergedService, answers as Record<string, unknown>);
+
     // Server-side quote computation using stored config (prevents client tampering)
     const quote = computeQuoteV2({
       tenant: {
@@ -65,18 +85,19 @@ export async function POST(req: NextRequest) {
         vat_rate: service.vat_rate,
         rut_enabled: service.rut_eligible
       },
-      service: service.config as ServiceConfig,
-      frequency,
+      service: mergedService,
+      frequency: frequency ?? "one_time",
       inputs,
       addons: [],
       applyRUT: service.rut_eligible,
+      coupon: undefined,
       answers
-    });
+    }, { frequencyMultiplierOverride: freqMul, answersOverride });
 
     // Fast path: check for existing booking with same idempotency key
     const { data: existing, error: exErr } = await sb
       .from("bookings")
-      .select("id, status, total_minor, created_at")
+      .select("id, status, currency, total_minor, vat_minor, rut_minor, created_at")
       .eq("tenant_id", tenantId)
       .eq("idempotency_key", idem)
       .maybeSingle();
@@ -93,7 +114,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         id: existing.id,
         status: existing.status,
+        currency: existing.currency,
         total_minor: existing.total_minor,
+        vat_minor: existing.vat_minor,
+        rut_minor: existing.rut_minor,
         created_at: existing.created_at
       }, { status: 200, headers: { "Idempotency-Key": idem } });
     }
@@ -108,7 +132,13 @@ export async function POST(req: NextRequest) {
       vat_minor: quote.vat_minor,
       rut_minor: quote.rut_minor,
       discount_minor: quote.discount_minor,
-      snapshot: quote,
+      snapshot: {
+        service_id,
+        frequency,
+        inputs,
+        answers,
+        quote,
+      },
       customer: customer,
       idempotency_key: idem
     };
@@ -116,7 +146,7 @@ export async function POST(req: NextRequest) {
     const { data: bookingRow, error: insertErr } = await sb
       .from("bookings")
       .insert(insertPayload)
-      .select("id, status, total_minor, created_at")
+      .select("id, status, currency, total_minor, vat_minor, rut_minor, created_at")
       .single();
 
     if (insertErr) throw insertErr;
@@ -141,7 +171,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       id: bookingRow.id,
       status: bookingRow.status,
+      currency: bookingRow.currency,
       total_minor: bookingRow.total_minor,
+      vat_minor: bookingRow.vat_minor,
+      rut_minor: bookingRow.rut_minor,
       created_at: bookingRow.created_at
     }, { status: 201, headers: { "Idempotency-Key": idem } });
 
