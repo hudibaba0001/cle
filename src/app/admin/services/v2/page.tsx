@@ -1,6 +1,8 @@
 "use client";
 import React, { useMemo, useState } from "react";
 
+const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 60);
+
 type Model =
   | "fixed_tier" | "tiered_multiplier" | "universal_multiplier"
   | "windows" | "per_room" | "hourly_area";
@@ -155,6 +157,7 @@ export default function ServiceBuilderV2Page() {
     hourTiers: [],
     dynamicQuestions: [],
   });
+  const [slug, setSlug] = useState<string>(slugify("Universal Multiplier Demo"));
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<Record<string, unknown> | null>(null);
 
@@ -410,6 +413,7 @@ export default function ServiceBuilderV2Page() {
         },
         body: JSON.stringify({
           name: service.name,
+          slug,
           config: service,
           active: true
         })
@@ -417,6 +421,9 @@ export default function ServiceBuilderV2Page() {
       
       if (!response.ok) {
         const error = await response.json();
+        if (response.status === 409) {
+          throw new Error('Slug already exists for this tenant. Change Service Name or Slug and try again.');
+        }
         throw new Error(error.error || 'Failed to save service');
       }
       
@@ -439,6 +446,7 @@ export default function ServiceBuilderV2Page() {
         hourTiers: [],
         dynamicQuestions: [],
       });
+      setSlug("");
       setPreview(null);
       
     } catch (e) {
@@ -485,8 +493,14 @@ export default function ServiceBuilderV2Page() {
               <div>
                 <label className="block text-sm font-medium mb-1">Service Name</label>
                 <input type="text" className="border rounded px-3 py-2 w-full"
-                  value={state.name} onChange={e=>setState(s=>({ ...s, name: e.target.value }))}
+                  value={state.name} onChange={e=>{ const v=e.target.value; setState(s=>({ ...s, name: v })); }}
                   placeholder="Enter service name" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Slug</label>
+                <input type="text" className="border rounded px-3 py-2 w-full"
+                  value={slug} onChange={e=>setSlug(slugify(e.target.value))}
+                  placeholder="unique-slug" />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Pricing Model</label>
