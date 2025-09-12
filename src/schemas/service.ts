@@ -22,19 +22,9 @@ const ModifierConditionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("boolean"), when: z.boolean(), answerKey: z.string().min(1) }),
 ]);
 
-const ModifierSchema = z.object({
-  key: z.string().min(1),
-  label: z.string().min(1),
-  condition: ModifierConditionSchema,
-  effect: ModifierEffectSchema,
-});
+// Shape kept inline where needed; no top-level export to avoid unused symbol
 
-const FeeSchema = z.object({
-  key: z.string().min(1),
-  name: z.string().min(1),
-  amount: z.number(),
-  rutEligible: z.boolean().default(false),
-});
+// Fee schema is represented in engine types; not needed standalone here
 
 // v2.1 extensions accepted in our API (kept optional with defaults)
 const FrequencyOptionSchema = z.object({

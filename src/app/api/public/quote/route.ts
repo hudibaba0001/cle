@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { computeQuoteV2 } from "@/lib/pricing-v2/engine";
-import { FrequencyKey, QuoteRequest, ServiceConfig } from "@/lib/pricing-v2/types";
+import { QuoteRequest, ServiceConfig } from "@/lib/pricing-v2/types";
 import { compileDynamicToModifiers, expandAnswersForDynamic, resolveFrequencyKeyOrThrow, UnknownFrequencyError, listAllowedFrequencyKeys } from "@/lib/pricing-v2/dynamic";
 // removed unused import
 
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   const quote = computeQuoteV2({
     tenant: body.tenant,
     service: mergedService,
-    frequency: (body.frequency as any) ?? "one_time",
+    frequency: body.frequency ?? "one_time",
     inputs: body.inputs as QuoteRequest["inputs"],
     addons: body.addons,
     applyRUT: body.applyRUT,
