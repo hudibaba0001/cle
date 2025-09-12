@@ -17,6 +17,26 @@ type ModifierUI = {
       rutEligible: boolean;
 };
 
+type FrequencyOptionUI = { key: string; label: string; multiplier: number };
+
+type DynImpactUI = {
+  enabled?: boolean;
+  targetUI: "subtotal" | "base";
+  mode: "percent" | "fixed";
+  value: number;
+  direction: "increase" | "decrease";
+  rutEligible?: boolean;
+      label?: string;
+    };
+
+type DynOptionUI = { value: string; label: string; impact?: DynImpactUI };
+
+type DynCheckboxUI = { type: "checkbox"; key: string; label: string; required?: boolean; impact?: DynImpactUI };
+type DynRadioUI = { type: "radio"; key: string; label: string; required?: boolean; options: DynOptionUI[] };
+type DynCheckboxMultiUI = { type: "checkbox_multi"; key: string; label: string; required?: boolean; options: DynOptionUI[] };
+type DynTextUI = { type: "text"; key: string; label: string; required?: boolean; pattern?: string };
+type DynQuestionUI = DynCheckboxUI | DynRadioUI | DynCheckboxMultiUI | DynTextUI;
+
 type FormState = {
   name: string;
   model: Model;
@@ -24,6 +44,7 @@ type FormState = {
   rutEligible: boolean;
   minimum?: number;
   frequencyMultipliers: { one_time: number; weekly: number; biweekly: number; monthly: number };
+  frequencyOptions: FrequencyOptionUI[];
   // model-specific inputs
   fixedTiers: { min: number; max: number; price: number }[];
   rateTiers: { min: number; max: number; ratePerSqm: number }[];
@@ -36,9 +57,7 @@ type FormState = {
   addons: { key: string; name: string; amount: number; rutEligible: boolean }[];
   modifiers: ModifierUI[];
   hourTiers?: { min: number; max: number; hours: number }[];
-  // UI questions (boolean yes/no). If a question has a matching modifier using the same answerKey, it will affect price; otherwise it's informational only
-  questions: { key: string; label: string }[];
-  questionAnswers: Record<string, boolean>;
+  dynamicQuestions: DynQuestionUI[];
 };
 
 const MODEL_OPTIONS: { label: string; value: Model }[] = [
@@ -56,6 +75,7 @@ function buildServiceConfig(s: FormState) {
     model: s.model,
     name: s.name || "Unnamed",
     frequencyMultipliers: s.frequencyMultipliers,
+    frequencyOptions: (s.frequencyOptions ?? []).map(o => ({ key: o.key, label: o.label, multiplier: Number(o.multiplier || 1) })),
     vatRate: s.vatRate ?? 25,
     rutEligible: !!s.rutEligible,
     addons: s.addons ?? [],
@@ -126,14 +146,14 @@ export default function ServiceBuilderV2Page() {
     rutEligible: true,
     minimum: 0,
     frequencyMultipliers: { one_time: 1, weekly: 1, biweekly: 1.15, monthly: 1.4 },
+    frequencyOptions: [],
     fixedTiers: [], rateTiers: [], windowTypes: [], roomTypes: [],
     ratePerSqm: 25,
     hoursPerSqm: 0.1, ratePerHour: 300,
     fees: [], addons: [],
     modifiers: [],
     hourTiers: [],
-    questions: [],
-    questionAnswers: {}
+    dynamicQuestions: [],
   });
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<Record<string, unknown> | null>(null);
@@ -298,7 +318,7 @@ export default function ServiceBuilderV2Page() {
   const addModifier = () => {
     setState(s => ({
       ...s,
-      modifiers: [
+    modifiers: [
         ...s.modifiers,
         {
           key: `mod_${Date.now()}`,
@@ -342,33 +362,33 @@ export default function ServiceBuilderV2Page() {
     });
   };
 
-  // Questions
-  const addQuestion = () => {
+  // Frequency options
+  const addFrequencyOption = () => {
+    setState(s => ({ ...s, frequencyOptions: [...(s.frequencyOptions ?? []), { key: `every_3_weeks`, label: "Every 3 weeks", multiplier: 1.25 }] }));
+  };
+  const updateFrequencyOption = (index: number, field: keyof FrequencyOptionUI, value: string | number) => {
     setState(s => ({
       ...s,
-      questions: [...s.questions, { key: `q_${Date.now()}`, label: "New question" }],
+      frequencyOptions: (s.frequencyOptions ?? []).map((fo, i) => (i === index ? { ...fo, [field]: value as never } : fo)),
     }));
   };
-  const updateQuestion = (index: number, field: keyof FormState["questions"][number], value: string) => {
-    setState(s => ({
-      ...s,
-      questions: s.questions.map((q, i) => (i === index ? { ...q, [field]: value } : q)),
-    }));
+  const removeFrequencyOption = (index: number) => {
+    setState(s => ({ ...s, frequencyOptions: (s.frequencyOptions ?? []).filter((_, i) => i !== index) }));
   };
-  const removeQuestion = (index: number) => {
-    setState(s => ({
-      ...s,
-      questions: s.questions.filter((_, i) => i !== index),
-    }));
+
+  // Dynamic questions
+  const addDynCheckbox = () => setState(s => ({ ...s, dynamicQuestions: [...s.dynamicQuestions, { type: "checkbox", key: `has_dog`, label: "Do you have a dog?", impact: { targetUI: "subtotal", mode: "percent", value: 10, direction: "increase", rutEligible: true, label: "+10% dog" } }] }));
+  const addDynRadio = () => setState(s => ({ ...s, dynamicQuestions: [...s.dynamicQuestions, { type: "radio", key: "windows", label: "Windows?", options: [{ value: "few", label: "Few" }, { value: "many", label: "Many (+5%)", impact: { targetUI: "subtotal", mode: "percent", value: 5, direction: "increase" } }] }] }));
+  const addDynMulti = () => setState(s => ({ ...s, dynamicQuestions: [...s.dynamicQuestions, { type: "checkbox_multi", key: "extras", label: "Extras", options: [{ value: "fridge", label: "Fridge (+150)", impact: { targetUI: "subtotal", mode: "fixed", value: 150, direction: "increase" } }, { value: "oven", label: "Oven (+100)", impact: { targetUI: "subtotal", mode: "fixed", value: 100, direction: "increase" } }] }] }));
+  const updateDynQuestion = (index: number, value: DynQuestionUI) => {
+    setState(s => ({ ...s, dynamicQuestions: s.dynamicQuestions.map((q, i) => (i === index ? value : q)) }));
   };
+  const removeDynQuestion = (index: number) => setState(s => ({ ...s, dynamicQuestions: s.dynamicQuestions.filter((_, i) => i !== index) }));
 
   async function onPreview() {
     try {
       setErr(null);
-      // Collect answers from the simple questions panel (boolean yes/no)
-      const answers: Record<string, unknown> = Object.fromEntries(
-        (state.questions || []).map(q => [q.key, !!state.questionAnswers[q.key]])
-      );
+      const answers: Record<string, unknown> = {};
       const j = await previewQuote(tenant, state, inputs, answers);
       setPreview(j);
     } catch (e) {
@@ -411,13 +431,13 @@ export default function ServiceBuilderV2Page() {
         rutEligible: true,
         minimum: 0,
         frequencyMultipliers: { one_time: 1, weekly: 1, biweekly: 1.15, monthly: 1.4 },
+        frequencyOptions: [],
         fixedTiers: [], rateTiers: [], windowTypes: [], roomTypes: [],
         ratePerSqm: 25,
         hoursPerSqm: 0.1, ratePerHour: 300,
         fees: [], addons: [], modifiers: [],
         hourTiers: [],
-        questions: [],
-        questionAnswers: {}
+        dynamicQuestions: [],
       });
       setPreview(null);
       
@@ -673,34 +693,135 @@ export default function ServiceBuilderV2Page() {
           <div className="mb-6">
             <div className="mb-2 font-medium">Frequency Multipliers</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {(["one_time","weekly","biweekly","monthly"] as const).map(k => (
+              {["one_time","weekly","biweekly","monthly"].map(k => (
                 <label key={k} className="text-sm">
-                  <div className="mb-1">{k.replace('_',' ')}</div>
-                  <input type="number" step="0.01" className="border rounded px-2 py-1 w-full" value={state.frequencyMultipliers[k]}
-                    onChange={e=>setState(s=>({ ...s, frequencyMultipliers: { ...s.frequencyMultipliers, [k]: Number(e.target.value) } }))}/>
-                </label>
+                  <div className="mb-1">{String(k).replace('_',' ')}</div>
+                  <input type="number" step="0.01" className="border rounded px-2 py-1 w-full" value={state.frequencyMultipliers[k as keyof typeof state.frequencyMultipliers]}
+                    onChange={e=>setState(s=>({ ...s, frequencyMultipliers: { ...s.frequencyMultipliers, [k]: Number(e.target.value) } as any }))}/>
+                  </label>
               ))}
             </div>
             <p className="text-xs text-gray-500 mt-1">Adjusts base after model, before modifiers. 1.0 = no change.</p>
           </div>
 
-          {/* Simple Questions */}
+          {/* Custom Frequency Options */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium">Simple Questions (Yes/No)</label>
-              <button onClick={addQuestion} className="px-2 py-1 bg-blue-500 text-white rounded text-sm">Add</button>
+              <label className="text-sm font-medium">Custom Frequency Options</label>
+              <button onClick={addFrequencyOption} className="px-2 py-1 bg-blue-500 text-white rounded text-sm">Add</button>
             </div>
             <div className="space-y-2">
-              {state.questions.map((q, i) => (
-                <div key={q.key} className="grid grid-cols-6 gap-2 items-center">
-                  <input className="border rounded px-2 py-1" placeholder="Answer key (e.g., has_pets)" value={q.key} onChange={e=>updateQuestion(i,'key', e.target.value)} />
-                  <input className="border rounded px-2 py-1 col-span-3" placeholder="Question label" value={q.label} onChange={e=>updateQuestion(i,'label', e.target.value)} />
-                  <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!state.questionAnswers[q.key]} onChange={e=>setState(s=>({ ...s, questionAnswers: { ...s.questionAnswers, [q.key]: e.target.checked } }))} /> Default: Yes</label>
-                  <button onClick={()=>removeQuestion(i)} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Remove</button>
+              {(state.frequencyOptions ?? []).map((fo, i) => (
+                <div key={i} className="grid grid-cols-5 gap-2 items-center">
+                  <input className="border rounded px-2 py-1" placeholder="Key (e.g., every_3_weeks)" value={fo.key} onChange={e=>updateFrequencyOption(i,'key', e.target.value)} />
+                  <input className="border rounded px-2 py-1 col-span-2" placeholder="Label" value={fo.label} onChange={e=>updateFrequencyOption(i,'label', e.target.value)} />
+                  <input type="number" step="0.01" className="border rounded px-2 py-1" placeholder="Multiplier ≥ 1" value={fo.multiplier} onChange={e=>updateFrequencyOption(i,'multiplier', Number(e.target.value))} />
+                  <button onClick={()=>removeFrequencyOption(i)} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Remove</button>
                 </div>
               ))}
             </div>
-            <p className="text-xs text-gray-500 mt-1">To affect price, add a modifier that references the same answerKey.</p>
+          </div>
+
+          {/* Dynamic Questions */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium">Dynamic Questions</label>
+              <div className="flex gap-2">
+                <button onClick={addDynCheckbox} className="px-2 py-1 bg-blue-500 text-white rounded text-sm">Add Checkbox</button>
+                <button onClick={addDynRadio} className="px-2 py-1 bg-blue-500 text-white rounded text-sm">Add Radio</button>
+                <button onClick={addDynMulti} className="px-2 py-1 bg-blue-500 text-white rounded text-sm">Add Multi</button>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {state.dynamicQuestions.map((q, i) => (
+                <div key={`${q.type}_${q.key}_${i}`} className="border rounded p-3">
+                  <div className="grid grid-cols-6 gap-2 items-center mb-2">
+                    <select className="border rounded px-2 py-1" value={q.type} onChange={e=>{
+                      const t = e.target.value as any; 
+                      const base = { key: (q as any).key, label: (q as any).label } as any;
+                      const next: any = t === 'checkbox' ? { type:'checkbox', ...base } : t === 'radio' ? { type:'radio', ...base, options: [] } : t === 'checkbox_multi' ? { type:'checkbox_multi', ...base, options: [] } : { type:'text', ...base };
+                      updateDynQuestion(i, next);
+                    }}>
+                      <option value="checkbox">checkbox</option>
+                      <option value="radio">radio</option>
+                      <option value="checkbox_multi">checkbox_multi</option>
+                      <option value="text">text</option>
+                    </select>
+                    <input className="border rounded px-2 py-1" placeholder="Key" value={(q as any).key} onChange={e=>updateDynQuestion(i, { ...q, key: e.target.value } as any)} />
+                    <input className="border rounded px-2 py-1 col-span-3" placeholder="Label" value={(q as any).label} onChange={e=>updateDynQuestion(i, { ...q, label: e.target.value } as any)} />
+                    <button onClick={()=>removeDynQuestion(i)} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Remove</button>
+                  </div>
+
+                  {/* Impacts / options */}
+                  {(q as any).type === 'checkbox' && (
+                    <div className="grid grid-cols-6 gap-2 items-center">
+                      <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!((q as any).impact?.enabled ?? true)} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? { targetUI:'subtotal', mode:'percent', value:10, direction:'increase' }), enabled: e.target.checked } })} /> Enable impact</label>
+                      <select className="border rounded px-2 py-1" value={((q as any).impact?.targetUI ?? 'subtotal')} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), targetUI: e.target.value as any } })}>
+                        <option value="subtotal">Subtotal</option>
+                        <option value="base">Base after frequency</option>
+                      </select>
+                      <select className="border rounded px-2 py-1" value={((q as any).impact?.mode ?? 'percent')} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), mode: e.target.value as any } })}>
+                        <option value="percent">Percent</option>
+                        <option value="fixed">Fixed</option>
+                      </select>
+                      <input type="number" className="border rounded px-2 py-1" placeholder="Value" value={((q as any).impact?.value ?? 0)} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), value: Number(e.target.value) } })} />
+                      <select className="border rounded px-2 py-1" value={((q as any).impact?.direction ?? 'increase')} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), direction: e.target.value as any } })}>
+                        <option value="increase">Increase</option>
+                        <option value="decrease">Decrease</option>
+                      </select>
+                      <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!(q as any).impact?.rutEligible} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), rutEligible: e.target.checked } })} /> RUT</label>
+                      <input className="border rounded px-2 py-1 col-span-6" placeholder="Impact label (optional)" value={((q as any).impact?.label ?? '')} onChange={e=>updateDynQuestion(i, { ...(q as any), impact: { ...((q as any).impact ?? {}), label: e.target.value } })} />
+                    </div>
+                  )}
+
+                  {(q as any).type !== 'checkbox' && 'options' in (q as any) && (
+                    <div className="space-y-2">
+                      {(((q as any).options ?? []) as any[]).map((opt, oi) => (
+                        <div key={oi} className="grid grid-cols-6 gap-2 items-center">
+                          <input className="border rounded px-2 py-1" placeholder="Value" value={opt.value} onChange={e=>{
+                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, value: e.target.value } : o) } as any; updateDynQuestion(i, next);
+                          }} />
+                          <input className="border rounded px-2 py-1 col-span-2" placeholder="Label" value={opt.label} onChange={e=>{
+                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, label: e.target.value } : o) } as any; updateDynQuestion(i, next);
+                          }} />
+                          <select className="border rounded px-2 py-1" value={(opt.impact?.targetUI ?? 'subtotal')} onChange={e=>{
+                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), targetUI: e.target.value as any } } : o) } as any; updateDynQuestion(i, next);
+                          }}>
+                            <option value="subtotal">Subtotal</option>
+                            <option value="base">Base after frequency</option>
+                          </select>
+                          <select className="border rounded px-2 py-1" value={(opt.impact?.mode ?? 'percent')} onChange={e=>{
+                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), mode: e.target.value as any } } : o) } as any; updateDynQuestion(i, next);
+                          }}>
+                            <option value="percent">Percent</option>
+                            <option value="fixed">Fixed</option>
+                          </select>
+                          <input type="number" className="border rounded px-2 py-1" placeholder="Value" value={(opt.impact?.value ?? 0)} onChange={e=>{
+                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), value: Number(e.target.value) } } : o) } as any; updateDynQuestion(i, next);
+                          }} />
+                          <select className="border rounded px-2 py-1" value={(opt.impact?.direction ?? 'increase')} onChange={e=>{
+                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), direction: e.target.value as any } } : o) } as any; updateDynQuestion(i, next);
+                          }}>
+                            <option value="increase">Increase</option>
+                            <option value="decrease">Decrease</option>
+                      </select>
+                          <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={!!opt.impact?.rutEligible} onChange={e=>{
+                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), rutEligible: e.target.checked } } : o) } as any; updateDynQuestion(i, next);
+                          }} /> RUT</label>
+                          <input className="border rounded px-2 py-1 col-span-6" placeholder="Impact label (optional)" value={(opt.impact?.label ?? '')} onChange={e=>{
+                            const next = { ...(q as any), options: (q as any).options.map((o: any, j: number)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), label: e.target.value } } : o) } as any; updateDynQuestion(i, next);
+                          }} />
+                        </div>
+                      ))}
+                      <button className="px-2 py-1 bg-blue-500 text-white rounded text-sm" onClick={()=>{
+                        const next = { ...(q as any), options: ([...((q as any).options ?? []), { value: '', label: '' }]) } as any; updateDynQuestion(i, next);
+                      }}>Add Option</button>
+                  </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Dynamic questions can affect price via impacts; no separate RUT flag per question.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Add-ons */}
@@ -784,8 +905,8 @@ export default function ServiceBuilderV2Page() {
                   <div className="text-sm mt-1">
                     Total: {invariantCheck?.total} minor<br/>
                     Sum: {invariantCheck?.sum} minor
-                  </div>
-                </div>
+            </div>
+          </div>
 
                 {/* Quote Summary */}
                 <div>
@@ -798,8 +919,8 @@ export default function ServiceBuilderV2Page() {
                     {Number(preview.rut_minor || 0) !== 0 && (
                       <div>RUT: {Number(preview.rut_minor || 0) / 100} SEK</div>
                     )}
-                  </div>
-                </div>
+          </div>
+        </div>
 
                 {/* Full JSON (collapsed) */}
                 <details className="text-xs">
