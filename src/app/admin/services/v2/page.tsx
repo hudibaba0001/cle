@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+// @ts-ignore
+import React from "react";
+// @ts-ignore
 import { useSearchParams } from "next/navigation";
 
 type PricingModel = "fixed_tier" | "tiered_multiplier" | "universal_multiplier" | "windows" | "hourly" | "per_room";
@@ -98,19 +101,30 @@ export default function ServiceBuilderV2() {
 
   function normalizeConfig(cfg: unknown): ServiceConfig {
     const config = cfg as Record<string, unknown> | null;
+    if (config === null) {
+      return {
+        currency: "SEK",
+        rutEligible: true,
+        hourlyRate: 1100,
+        areaToHours: { "50": 3 },
+        frequencyOptions: [],
+        dynamicQuestions: [],
+        fees: [],
+      };
+    }
     return {
-      currency: (config?.currency as string | undefined) ?? "SEK",
-      rutEligible: (config?.rutEligible as boolean | undefined) ?? true,
-      hourlyRate: typeof config?.hourlyRate === "number" ? config.hourlyRate : 1100,
-      areaToHours: (config?.areaToHours as Record<string, number> | undefined) ?? { "50": 3 },
-      frequencyOptions: Array.isArray(config?.frequencyOptions) ? config.frequencyOptions as FrequencyOption[] : [],
-      dynamicQuestions: Array.isArray(config?.dynamicQuestions) ? config.dynamicQuestions as DynamicQuestion[] : [],
-      fees: Array.isArray(config?.fees) ? config.fees as Fee[] : [],
+      currency: (config.currency as string | undefined) ?? "SEK",
+      rutEligible: (config.rutEligible as boolean | undefined) ?? true,
+      hourlyRate: typeof config.hourlyRate === "number" ? config.hourlyRate : 1100,
+      areaToHours: (config.areaToHours as Record<string, number> | undefined) ?? { "50": 3 },
+      frequencyOptions: Array.isArray(config.frequencyOptions) ? config.frequencyOptions as FrequencyOption[] : [],
+      dynamicQuestions: Array.isArray(config.dynamicQuestions) ? config.dynamicQuestions as DynamicQuestion[] : [],
+      fees: Array.isArray(config.fees) ? config.fees as Fee[] : [],
     };
   }
 
   function up(patch: Partial<ServiceRow>) {
-    setSvc((prev) => {
+    setSvc((prev: ServiceRow) => {
       const next = { ...prev, ...patch, config: { ...prev.config, ...(patch.config ?? {}) } };
       if (JSON.stringify(next) !== JSON.stringify(prev)) setDirty(true);
       return next;
@@ -222,7 +236,7 @@ export default function ServiceBuilderV2() {
           <p className="text-sm text-neutral-500">Frequencies, Add-ons, Fees, and Boolean Modifiers</p>
         </div>
         <div className="flex items-center gap-2">
-          <input aria-label="Tenant ID" placeholder="Tenant ID (required)" className="rounded-xl border px-3 py-2 text-sm" value={tenantId} onChange={(e) => setTenantId(e.target.value)} />
+          <input aria-label="Tenant ID" placeholder="Tenant ID (required)" className="rounded-xl border px-3 py-2 text-sm" value={tenantId} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTenantId(e.target.value)} />
           <button onClick={save} disabled={saving || !tenantId} className="rounded-xl border px-3 py-2 text-sm hover:bg-neutral-50 disabled:opacity-50">{saving ? "Saving…" : "Save"}</button>
           <button onClick={preview} disabled={quoting || !tenantId} className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm hover:bg-blue-700 disabled:opacity-50">{quoting ? "Previewing…" : "Preview"}</button>
         </div>
@@ -231,10 +245,10 @@ export default function ServiceBuilderV2() {
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-2xl border p-4 shadow-sm space-y-2">
           <label className="text-sm">Service name</label>
-          <input className="w-full rounded-xl border p-2 text-sm" value={svc.name} onChange={(e) => up({ name: e.target.value })} />
+          <input aria-label="Service name" className="w-full rounded-xl border p-2 text-sm" value={svc.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => up({ name: e.target.value })} />
 
           <label className="text-sm mt-2">Pricing model</label>
-          <select className="w-full rounded-xl border p-2 text-sm" value={svc.model} onChange={(e) => up({ model: e.target.value as PricingModel })}>
+          <select aria-label="Pricing model" className="w-full rounded-xl border p-2 text-sm" value={svc.model} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => up({ model: e.target.value as PricingModel })}>
             <option value="hourly">Hourly</option>
             <option value="fixed_tier">Fixed Tier</option>
             <option value="tiered_multiplier">Tiered Multiplier</option>
@@ -247,13 +261,13 @@ export default function ServiceBuilderV2() {
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-sm">Hourly rate</label>
-                <input type="number" className="w-full rounded-xl border p-2 text-sm" value={svc.config.hourlyRate ?? 1100}
-                  onChange={(e) => up({ config: { ...svc.config, hourlyRate: Number(e.target.value) || 0 } })} />
+                <input aria-label="Hourly rate" type="number" className="w-full rounded-xl border p-2 text-sm" value={svc.config.hourlyRate ?? 1100}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => up({ config: { ...svc.config, hourlyRate: Number(e.target.value) || 0 } })} />
               </div>
               <div>
                 <label className="text-sm">Area→Hours (JSON)</label>
-                <input className="w-full rounded-xl border p-2 text-sm" value={JSON.stringify(svc.config.areaToHours ?? { "50": 3 })}
-                  onChange={(e) => { try { up({ config: { ...svc.config, areaToHours: JSON.parse(e.target.value) } }); } catch {} }} />
+                <input aria-label="Area to Hours JSON" className="w-full rounded-xl border p-2 text-sm" value={JSON.stringify(svc.config.areaToHours ?? { "50": 3 })}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => { try { up({ config: { ...svc.config, areaToHours: JSON.parse(e.target.value) } }); } catch {} }} />
               </div>
             </div>
           )}
@@ -263,19 +277,19 @@ export default function ServiceBuilderV2() {
           <div className="flex items-center justify-between">
             <label className="text-sm">Currency</label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={!!svc.config.rutEligible} onChange={(e) => up({ config: { ...svc.config, rutEligible: e.target.checked } })} />
+              <input type="checkbox" checked={!!svc.config.rutEligible} onChange={(e: React.ChangeEvent<HTMLInputElement>) => up({ config: { ...svc.config, rutEligible: e.target.checked } })} />
               RUT eligible
             </label>
           </div>
-          <input className="w-full rounded-xl border p-2 text-sm" value={svc.config.currency} onChange={(e) => up({ config: { ...svc.config, currency: e.target.value || "SEK" } })} />
+          <input aria-label="Currency" className="w-full rounded-xl border p-2 text-sm" value={svc.config.currency} onChange={(e: React.ChangeEvent<HTMLInputElement>) => up({ config: { ...svc.config, currency: e.target.value || "SEK" } })} />
 
           <label className="text-sm mt-2">Frequency options</label>
           <div className="space-y-2">
             {svc.config.frequencyOptions.map((f, i) => (
               <div key={f.key + i} className="grid grid-cols-3 gap-2">
-                <input className="rounded-xl border p-2 text-sm" value={f.key} onChange={(e) => editFreq(i, { key: e.target.value })} aria-label="Frequency key" />
-                <input className="rounded-xl border p-2 text-sm" value={f.label} onChange={(e) => editFreq(i, { label: e.target.value })} aria-label="Frequency label" />
-                <input type="number" className="rounded-xl border p-2 text-sm" value={f.multiplier} onChange={(e) => editFreq(i, { multiplier: Number(e.target.value) || 0 })} aria-label="Frequency multiplier" />
+                <input aria-label="Frequency key" className="rounded-xl border p-2 text-sm" value={f.key} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editFreq(i, { key: e.target.value })} />
+                <input aria-label="Frequency label" className="rounded-xl border p-2 text-sm" value={f.label} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editFreq(i, { label: e.target.value })} />
+                <input aria-label="Frequency multiplier" type="number" className="rounded-xl border p-2 text-sm" value={f.multiplier} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editFreq(i, { multiplier: Number(e.target.value) || 0 })} />
               </div>
             ))}
             <button className="text-sm rounded-xl border px-2 py-1" onClick={addFreq}>+ Add frequency</button>
@@ -289,10 +303,10 @@ export default function ServiceBuilderV2() {
             .filter((q) => q.type === "boolean" && q.modifier && (q.modifier as DynModifier).type === "fixed")
             .map((q) => (
               <div key={q.key} className="grid grid-cols-5 gap-2 items-center">
-                <input className="col-span-2 rounded-xl border p-2 text-sm" value={q.key} onChange={(e) => editDyn(q.key, { key: e.target.value })} aria-label="Add-on key" />
-                <input className="col-span-2 rounded-xl border p-2 text-sm" value={q.label} onChange={(e) => editDyn(q.key, { label: e.target.value })} aria-label="Add-on label" />
-                <input type="number" className="rounded-xl border p-2 text-sm" value={(q.modifier as { value_minor?: number }).value_minor ?? 0}
-                  onChange={(e) => editDyn(q.key, { modifier: { type: "fixed", value_minor: Number(e.target.value) || 0, scope: "pre_vat_rut", rut_eligible: false } })} aria-label="Add-on amount (minor)" />
+                <input aria-label="Add-on key" className="col-span-2 rounded-xl border p-2 text-sm" value={q.key} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editDyn(q.key, { key: e.target.value })} />
+                <input aria-label="Add-on label" className="col-span-2 rounded-xl border p-2 text-sm" value={q.label} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editDyn(q.key, { label: e.target.value })} />
+                <input aria-label="Add-on amount (minor)" type="number" className="rounded-xl border p-2 text-sm" value={(q.modifier as { value_minor?: number }).value_minor ?? 0}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => editDyn(q.key, { modifier: { type: "fixed", value_minor: Number(e.target.value) || 0, scope: "pre_vat_rut", rut_eligible: false } })} />
               </div>
             ))}
           <button className="text-sm rounded-xl border px-2 py-1" onClick={addAddon}>+ Add add-on</button>
@@ -301,9 +315,9 @@ export default function ServiceBuilderV2() {
         <Panel title="Fees (always applied)">
           {svc.config.fees.map((f, i) => (
             <div key={f.key} className="grid grid-cols-5 gap-2 items-center">
-              <input className="col-span-2 rounded-xl border p-2 text-sm" value={f.key} onChange={(e) => editFee(i, { key: e.target.value })} aria-label="Fee key" />
-              <input className="col-span-2 rounded-xl border p-2 text-sm" value={f.label} onChange={(e) => editFee(i, { label: e.target.value })} aria-label="Fee label" />
-              <input type="number" className="rounded-xl border p-2 text-sm" value={f.amount_minor} onChange={(e) => editFee(i, { amount_minor: Number(e.target.value) || 0 })} aria-label="Fee amount (minor)" />
+              <input aria-label="Fee key" className="col-span-2 rounded-xl border p-2 text-sm" value={f.key} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editFee(i, { key: e.target.value })} />
+              <input aria-label="Fee label" className="col-span-2 rounded-xl border p-2 text-sm" value={f.label} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editFee(i, { label: e.target.value })} />
+              <input aria-label="Fee amount (minor)" type="number" className="rounded-xl border p-2 text-sm" value={f.amount_minor} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editFee(i, { amount_minor: Number(e.target.value) || 0 })} />
             </div>
           ))}
           <button className="text-sm rounded-xl border px-2 py-1" onClick={addFee}>+ Add fee</button>
@@ -314,19 +328,19 @@ export default function ServiceBuilderV2() {
             .filter((q) => q.type === "boolean" && (!q.modifier || (q.modifier as DynModifier).type !== "fixed"))
             .map((q) => (
               <div key={q.key} className="grid grid-cols-6 gap-2 items-center">
-                <input className="col-span-2 rounded-xl border p-2 text-sm" value={q.key} onChange={(e) => editDyn(q.key, { key: e.target.value })} aria-label="Modifier key" />
-                <input className="col-span-2 rounded-xl border p-2 text-sm" value={q.label} onChange={(e) => editDyn(q.key, { label: e.target.value })} aria-label="Modifier label" />
-                <select className="rounded-xl border p-2 text-sm" value={q.modifier && "type" in q.modifier ? (q.modifier as DynModifier).type : "multiplier"}
-                  onChange={(e) => editDyn(q.key, e.target.value === "multiplier"
+                <input aria-label="Modifier key" className="col-span-2 rounded-xl border p-2 text-sm" value={q.key} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editDyn(q.key, { key: e.target.value })} />
+                <input aria-label="Modifier label" className="col-span-2 rounded-xl border p-2 text-sm" value={q.label} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editDyn(q.key, { label: e.target.value })} />
+                <select aria-label="Modifier type" className="rounded-xl border p-2 text-sm" value={q.modifier && "type" in q.modifier ? (q.modifier as DynModifier).type : "multiplier"}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => editDyn(q.key, e.target.value === "multiplier"
                     ? { modifier: { type: "multiplier", value: 1.1, scope: "subtotal_ex_vat" } }
                     : { modifier: { type: "fixed", value_minor: 2500, scope: "pre_vat_rut", rut_eligible: false } })}>
                   <option value="multiplier">Multiplier</option>
                   <option value="fixed">Fixed (use Add-ons instead)</option>
                 </select>
-                <input type="number" className="rounded-xl border p-2 text-sm"
+                <input aria-label="Multiplier value" type="number" className="rounded-xl border p-2 text-sm"
                   value={q.modifier && (q.modifier as DynModifier).type === "multiplier" ? (q.modifier as { value?: number }).value : 1}
-                  onChange={(e) => editDyn(q.key, { modifier: { type: "multiplier", value: Number(e.target.value) || 1, scope: "subtotal_ex_vat" } })}
-                  aria-label="Multiplier value" />
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => editDyn(q.key, { modifier: { type: "multiplier", value: Number(e.target.value) || 1, scope: "subtotal_ex_vat" } })}
+                  />
               </div>
             ))}
           <button className="text-sm rounded-xl border px-2 py-1" onClick={addBoolMod}>+ Add boolean modifier</button>
@@ -336,7 +350,7 @@ export default function ServiceBuilderV2() {
       <section className="rounded-2xl border p-4 shadow-sm space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm">Preview Frequency</label>
-          <select className="rounded-xl border px-3 py-2 text-sm" value={previewFreq} onChange={(e) => setPreviewFreq(e.target.value)}>
+          <select aria-label="Preview Frequency" className="rounded-xl border px-3 py-2 text-sm" value={previewFreq} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPreviewFreq(e.target.value)}>
             {svc.config.frequencyOptions.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
           </select>
           <span className="text-sm text-neutral-500">Toggle add-ons/modifiers to include them in Preview:</span>
@@ -344,7 +358,7 @@ export default function ServiceBuilderV2() {
         <div className="flex flex-wrap gap-2">
           {svc.config.dynamicQuestions.map((q) => (
             <label key={q.key} className="flex items-center gap-2 text-sm border rounded-xl px-3 py-2">
-              <input type="checkbox" checked={!!previewAnswers[q.key]} onChange={(e) => setPreviewAnswers((p) => ({ ...p, [q.key]: e.target.checked }))} />
+              <input type="checkbox" checked={!!previewAnswers[q.key]} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPreviewAnswers((p: Record<string, boolean>) => ({ ...p, [q.key]: e.target.checked }))} />
               {q.label} <span className="text-neutral-500">({q.key})</span>
             </label>
           ))}
