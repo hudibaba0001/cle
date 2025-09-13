@@ -26,10 +26,10 @@ function minorToLabel(minor?: number | null, currency = "SEK") {
 function deriveMinPriceMinor(cfg: Record<string, unknown> | null): number | null {
   if (!cfg) return null;
   // Prefer explicit minPriceMinor when present.
-  if (typeof (cfg as any).minPriceMinor === "number") return (cfg as any).minPriceMinor;
+  if (typeof cfg.minPriceMinor === "number") return cfg.minPriceMinor;
   // For hourly model: min(areaToHours) * hourlyRate * 100 (minor units)
-  const a2h = (cfg as any).areaToHours as Record<string, number> | undefined;
-  const rate = (cfg as any).hourlyRate as number | undefined;
+  const a2h = cfg.areaToHours as Record<string, number> | undefined;
+  const rate = cfg.hourlyRate as number | undefined;
   if (a2h && rate && typeof rate === "number") {
     const hours = Math.min(...Object.values(a2h).filter((n) => typeof n === "number" && isFinite(n)));
     if (isFinite(hours)) return Math.round(hours * rate * 100);
@@ -37,7 +37,7 @@ function deriveMinPriceMinor(cfg: Record<string, unknown> | null): number | null
   return null;
 }
 function addOnsCount(cfg: Record<string, unknown> | null): number {
-  const dyn = (cfg as any)?.dynamicQuestions as Array<any> | undefined;
+  const dyn = cfg?.dynamicQuestions as Array<Record<string, unknown>> | undefined;
   if (!Array.isArray(dyn)) return 0;
   // Count booleans or entries that carry a modifier (heuristic).
   return dyn.filter((q) => q && (q.type === "boolean" || q.modifier)).length;
@@ -60,7 +60,7 @@ export default async function ServiceManagerPage({
   const total = services.length;
   const published = services.filter((s) => s.active === true).length;
   const drafts = total - published;
-  const rutEligible = services.filter((s) => Boolean((s.config as any)?.rutEligible)).length;
+  const rutEligible = services.filter((s) => Boolean(s.config?.rutEligible)).length;
 
   const saved = searchParams?.saved === "1";
   const savedId = typeof searchParams?.id === "string" ? searchParams.id : undefined;
@@ -108,7 +108,7 @@ export default async function ServiceManagerPage({
                   <h3 className="font-semibold">{s.name || "(unnamed service)"}</h3>
                   <div className="mt-1 flex items-center gap-2 text-xs text-neutral-600">
                     <span className="rounded-full border px-2 py-0.5">{modelLabel(s.model)}</span>
-                    {Boolean((cfg as any)?.rutEligible) && (
+                    {Boolean(cfg?.rutEligible) && (
                       <span className="rounded-full border px-2 py-0.5">RUT</span>
                     )}
                   </div>
@@ -145,7 +145,7 @@ export default async function ServiceManagerPage({
           );
         })}
         {services.length === 0 && (
-          <div className="text-sm text-neutral-500">No services yet. Click "Add Service".</div>
+          <div className="text-sm text-neutral-500">No services yet. Click &quot;Add Service&quot;.</div>
         )}
       </section>
     </div>

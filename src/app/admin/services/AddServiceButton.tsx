@@ -44,8 +44,8 @@ export default function AddServiceButton() {
       // Option A: go straight to Builder v2 to edit this service
       router.push(`/admin/services/v2?service_id=${id}`);
       // Option B (dashboard flash): router.push(`/admin/services?saved=1&id=${id}`)
-    } catch (e: any) {
-      setError(e.message || "Failed to create service");
+    } catch (e: unknown) {
+      setError((e as Error).message || "Failed to create service");
     } finally {
       setPending(false);
     }
