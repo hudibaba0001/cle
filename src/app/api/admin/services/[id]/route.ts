@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
 import { z } from "zod";
 import { ServiceConfigSchema } from "@/schemas/service";
+import { supabaseAdmin as createServerClient } from "@/lib/supabase/server";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const tenantId = req.headers.get("x-tenant-id");
   if (!tenantId) return NextResponse.json({ error: "TENANT_REQUIRED" }, { status: 401 });
   const { id } = await params;
-  const sb = supabaseAdmin();
+  const sb = createServerClient();
   const { data, error } = await sb
     .from("services")
     .select("*")
@@ -58,7 +58,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "NO_FIELDS" }, { status: 400 });
   }
 
-  const sb = supabaseAdmin();
+  const sb = createServerClient();
   const { data, error } = await sb
     .from("services")
     .update(fields)
