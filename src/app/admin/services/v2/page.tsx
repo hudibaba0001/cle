@@ -24,9 +24,9 @@ type FrequencyOptionUI = { key: string; label: string; multiplier: number };
 type DynImpactUI = {
   enabled?: boolean;
   targetUI: "subtotal" | "base";
-  mode: "percent" | "fixed";
-  value: number;
-  direction: "increase" | "decrease";
+      mode: "percent" | "fixed";
+      value: number;
+      direction: "increase" | "decrease";
   rutEligible?: boolean;
       label?: string;
     };
@@ -241,7 +241,7 @@ export default function ServiceBuilderV2Page() {
       service,
       frequency: previewFrequency,
       inputs,
-      addons: [],
+    addons: [],
       applyRUT: true,
       coupon: undefined,
       answers
@@ -663,12 +663,12 @@ export default function ServiceBuilderV2Page() {
                 <input type="number" className="border rounded px-3 py-2 w-full" placeholder="e.g. 25"
                   value={state.vatRate} onChange={e=>setState(s=>({ ...s, vatRate: Number(e.target.value) }))} />
               </div>
-              <div>
+        <div>
                 <label className="block text-sm font-medium mb-1">Minimum Price (SEK)</label>
                 <input type="number" className="border rounded px-3 py-2 w-full" placeholder="e.g. 500"
                   value={state.minimum ?? 0} onChange={e=>setState(s=>({ ...s, minimum: Number(e.target.value) }))} />
               </div>
-            </div>
+        </div>
             <div className="mt-4">
               <label className="flex items-center">
                 <input type="checkbox" className="mr-2"
@@ -676,8 +676,8 @@ export default function ServiceBuilderV2Page() {
                   onChange={e=>setState(s=>({ ...s, rutEligible: e.target.checked }))} />
                 RUT Eligible (Swedish tax deduction)
               </label>
-            </div>
-          </div>
+        </div>
+      </div>
 
           {/* Model-Specific Configuration */}
           <div className="bg-white border rounded-lg p-4">
@@ -957,13 +957,13 @@ export default function ServiceBuilderV2Page() {
                           }}>
                             <option value="subtotal">Subtotal</option>
                             <option value="base">Base after frequency</option>
-                          </select>
+                      </select>
                           <select className="border rounded px-2 py-1" title="Option impact mode" value={opt.impact?.mode ?? 'percent'} onChange={e=>{
                             const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), mode: e.target.value as DynImpactUI['mode'] } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }}>
                             <option value="percent">Percent</option>
                             <option value="fixed">Fixed</option>
-                          </select>
+                      </select>
                           <input type="number" className="border rounded px-2 py-1" placeholder="Value" value={opt.impact?.value ?? 0} onChange={e=>{
                             const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), value: Number(e.target.value) } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }} />
@@ -1015,7 +1015,7 @@ export default function ServiceBuilderV2Page() {
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium">Fees</label>
                 <button onClick={addFee} className="px-2 py-1 bg-blue-500 text-white rounded text-sm">Add</button>
-              </div>
+                  </div>
               <div className="space-y-2">
                 {state.fees.map((f, i) => (
                   <div key={i} className="grid grid-cols-5 gap-2 items-center">
@@ -1024,8 +1024,8 @@ export default function ServiceBuilderV2Page() {
                     <input type="number" className="border rounded px-2 py-1" placeholder="Amount" value={f.amount} onChange={e=>updateFee(i,'amount',Number(e.target.value))} />
                     <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={f.rutEligible} onChange={e=>updateFee(i,'rutEligible',e.target.checked)} /> RUT</label>
                     <button onClick={()=>removeFee(i)} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Remove</button>
-                  </div>
-                ))}
+                </div>
+              ))}
               </div>
             </div>
           </div>
@@ -1052,8 +1052,8 @@ export default function ServiceBuilderV2Page() {
                   <input type="number" className="border rounded px-2 py-1" placeholder="Value" value={m.value} onChange={e=>updateModifier(i,'value',Number(e.target.value))} />
                   <button onClick={()=>removeModifier(i)} className="px-2 py-1 bg-red-500 text-white rounded text-sm">Remove</button>
                 </div>
-              ))}
-            </div>
+                ))}
+              </div>
           </div>
         </div>
         </div>
