@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import React from "react";
 import { useSearchParams } from "next/navigation";
 
@@ -227,6 +227,7 @@ export default function ServiceBuilderV2() {
   }
 
   return (
+    <Suspense fallback={<div className="p-6">Loading…</div>}>
     <div className="mx-auto max-w-6xl p-6 space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -397,6 +398,7 @@ export default function ServiceBuilderV2() {
         )}
       </section>
     </div>
+    </Suspense>
   );
 }
 
