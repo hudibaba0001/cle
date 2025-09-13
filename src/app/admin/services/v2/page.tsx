@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState, Suspense } from "react";
 import React from "react";
 import { useSearchParams } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type PricingModel = "fixed_tier" | "tiered_multiplier" | "universal_multiplier" | "windows" | "hourly" | "per_room";
 
 type FrequencyOption = { key: string; label: string; multiplier: number };
@@ -49,7 +52,32 @@ type QuoteRes = {
   currency: string;
 };
 
-export default function ServiceBuilderV2() {
+export default function ServiceBuilderPage() {
+  return (
+    <Suspense fallback={<BuilderSkeleton />}> 
+      <ServiceBuilderV2 />
+    </Suspense>
+  );
+}
+
+function BuilderSkeleton() {
+  return (
+    <div className="mx-auto max-w-6xl p-6 space-y-4">
+      <div className="h-8 w-64 rounded-xl bg-neutral-100" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="h-56 rounded-2xl border bg-neutral-50" />
+        <div className="h-56 rounded-2xl border bg-neutral-50" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="h-64 rounded-2xl border bg-neutral-50" />
+        <div className="h-64 rounded-2xl border bg-neutral-50" />
+        <div className="h-64 rounded-2xl border bg-neutral-50" />
+      </div>
+    </div>
+  );
+}
+
+function ServiceBuilderV2() {
   const sp = useSearchParams();
   const serviceId = sp.get("service_id") || undefined;
 
