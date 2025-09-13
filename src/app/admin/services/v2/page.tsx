@@ -183,12 +183,12 @@ function buildServiceConfig(s: FormState) {
 }
 
 // ---- preview handler (POST /api/pricing/v2/quote)
-async function previewQuote(tenantId: string, state: FormState, inputs: Record<string, unknown>, answers: Record<string, unknown>) {
+async function previewQuote(tenantId: string, state: FormState, inputs: Record<string, unknown>, answers: Record<string, unknown>, frequency: string) {
   const service = buildServiceConfig(state);
   const body = {
     tenant: { currency: "SEK", vat_rate: service.vatRate, rut_enabled: service.rutEligible },
     service,
-    frequency: "monthly" as const,
+    frequency,
     inputs,
     addons: [],
     applyRUT: true,
@@ -226,6 +226,8 @@ export default function ServiceBuilderV2Page() {
   const [slug, setSlug] = useState<string>(slugify("Universal Multiplier Demo"));
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<unknown>(null);
+  const [previewFrequency, setPreviewFrequency] = useState<string>("monthly");
+  const [answersText, setAnswersText] = useState<string>("{}");
 
   const getErrorText = (e: unknown): string => {
     if (!e) return "";
@@ -472,8 +474,12 @@ export default function ServiceBuilderV2Page() {
   async function onPreview() {
     try {
       setErr(null);
-      const answers: Record<string, unknown> = {};
-      const j = await previewQuote(tenant, state, inputs, answers);
+      let answers: Record<string, unknown> = {};
+      if (answersText && answersText.trim().length > 0) {
+        try { answers = JSON.parse(answersText) as Record<string, unknown>; }
+        catch { throw new Error("Invalid JSON in Preview Answers"); }
+      }
+      const j = await previewQuote(tenant, state, inputs, answers, previewFrequency);
       setPreview(j);
     } catch (e) {
       setPreview(null); 
@@ -1007,6 +1013,27 @@ export default function ServiceBuilderV2Page() {
         <div className="lg:col-span-1">
           <div className="bg-white border rounded-lg p-4 sticky top-4">
             <h2 className="text-lg font-semibold mb-4">Preview & Validation</h2>
+            {/* Preview Controls */}
+            <div className="mb-4 space-y-2">
+              <div>
+                <label className="block text-sm font-medium mb-1">Preview Frequency</label>
+                <select className="border rounded px-2 py-1 w-full" title="Preview frequency"
+                  value={previewFrequency} onChange={e=>setPreviewFrequency(e.target.value)}>
+                  <option value="one_time">one_time</option>
+                  <option value="weekly">weekly</option>
+                  <option value="biweekly">biweekly</option>
+                  <option value="monthly">monthly</option>
+                  {(state.frequencyOptions ?? []).map(o=> (
+                    <option key={o.key} value={o.key}>{o.key}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Preview Answers (JSON)</label>
+                <textarea className="border rounded px-2 py-1 w-full text-xs" rows={4}
+                  placeholder='{"has_dog": true}' value={answersText} onChange={e=>setAnswersText(e.target.value)} />
+              </div>
+            </div>
             
             {preview ? (
               <div className="space-y-4">
