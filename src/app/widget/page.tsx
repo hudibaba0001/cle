@@ -369,7 +369,12 @@ export default function WidgetPage() {
             </div>
           )}
                       {q.type === "text" && (
-                        <input className="border rounded-lg p-2 w-full" value={answers[q.key] ?? ""} onChange={e => updateAnswer(q.key, e.target.value)} title={q.label} />
+                        <input
+                          className="border rounded-lg p-2 w-full"
+                          value={typeof answers[q.key] === "string" ? (answers[q.key] as string) : ""}
+                          onChange={e => updateAnswer(q.key, e.target.value)}
+                          title={q.label}
+                        />
                       )}
                     </div>
                   ))}
