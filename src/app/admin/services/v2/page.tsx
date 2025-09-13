@@ -73,6 +73,71 @@ const MODEL_OPTIONS: { label: string; value: Model }[] = [
 
 // ---- core mapper: FormState -> ServiceConfig (engine expects this shape)
 function buildServiceConfig(s: FormState) {
+  const toEffectTarget = (t: "subtotal" | "base") => (
+    t === "base" ? "base_after_frequency" : "subtotal_before_modifiers"
+  );
+
+  const dynQs = (s.dynamicQuestions ?? []).map((q) => {
+    if (q.type === "checkbox") {
+      const imp = q.impact && (q.impact.enabled !== false)
+        ? {
+            target: toEffectTarget(q.impact.targetUI),
+            mode: q.impact.mode,
+            value: Number(q.impact.value || 0),
+            direction: q.impact.direction,
+            rutEligible: !!q.impact.rutEligible,
+            label: q.impact.label || "+impact",
+          }
+        : undefined;
+      return { type: "checkbox" as const, key: q.key, label: q.label, required: q.required, impact: imp };
+    }
+    if (q.type === "radio") {
+      return {
+        type: "radio" as const,
+        key: q.key,
+        label: q.label,
+        required: q.required,
+        options: (q.options ?? []).map((o) => ({
+          value: o.value,
+          label: o.label,
+          impact: o.impact
+            ? {
+                target: toEffectTarget(o.impact.targetUI),
+                mode: o.impact.mode,
+                value: Number(o.impact.value || 0),
+                direction: o.impact.direction,
+                rutEligible: !!o.impact.rutEligible,
+                label: o.impact.label || "+option",
+              }
+            : undefined,
+        })),
+      };
+    }
+    if (q.type === "checkbox_multi") {
+      return {
+        type: "checkbox_multi" as const,
+        key: q.key,
+        label: q.label,
+        required: q.required,
+        options: (q.options ?? []).map((o) => ({
+          value: o.value,
+          label: o.label,
+          impact: o.impact
+            ? {
+                target: toEffectTarget(o.impact.targetUI),
+                mode: o.impact.mode,
+                value: Number(o.impact.value || 0),
+                direction: o.impact.direction,
+                rutEligible: !!o.impact.rutEligible,
+                label: o.impact.label || "+option",
+              }
+            : undefined,
+        })),
+      };
+    }
+    // text
+    return { type: "text" as const, key: q.key, label: q.label, required: q.required, pattern: (q as DynTextUI).pattern };
+  });
   const base = {
     model: s.model,
     name: s.name || "Unnamed",
@@ -95,7 +160,8 @@ function buildServiceConfig(s: FormState) {
         label: m.label || m.key,
       }
     })),
-    minimum: Number(s.minimum || 0)
+    minimum: Number(s.minimum || 0),
+    dynamicQuestions: dynQs,
   } as const;
 
   switch (s.model) {
