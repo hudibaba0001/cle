@@ -229,6 +229,49 @@ export default function ServiceBuilderV2Page() {
   const [previewFrequency, setPreviewFrequency] = useState<string>("monthly");
   const [answersText, setAnswersText] = useState<string>("{}");
 
+  const buildPreviewBody = (): Record<string, unknown> => {
+    const service = buildServiceConfig(state);
+    let answers: Record<string, unknown> = {};
+    if (answersText && answersText.trim().length > 0) {
+      try { answers = JSON.parse(answersText) as Record<string, unknown>; }
+      catch { /* ignore here; handled on preview */ }
+    }
+    return {
+      tenant: { currency: "SEK", vat_rate: service.vatRate, rut_enabled: service.rutEligible },
+      service,
+      frequency: previewFrequency,
+      inputs,
+      addons: [],
+      applyRUT: true,
+      coupon: undefined,
+      answers
+    } as Record<string, unknown>;
+  };
+
+  const copyAsCurl = async () => {
+    try {
+      const payload = buildPreviewBody();
+      const json = JSON.stringify(payload);
+      const cmd = `curl -sS -X POST http://localhost:3000/api/pricing/v2/quote -H "Content-Type: application/json" -H "x-tenant-id: ${tenant}" --data-binary '${json}'`;
+      await navigator.clipboard.writeText(cmd);
+      alert("cURL copied to clipboard");
+    } catch (e) {
+      alert("Copy failed");
+    }
+  };
+
+  const copyAsPowerShell = async () => {
+    try {
+      const payload = buildPreviewBody();
+      const json = JSON.stringify(payload, null, 2);
+      const ps = `$Base = "http://localhost:3000"; $Tenant = "${tenant}"\n$body = @'\n${json}\n'@\nInvoke-RestMethod -Uri "$Base/api/pricing/v2/quote" -Method POST -ContentType "application/json" -Headers @{ "x-tenant-id"=$Tenant } -Body $body`;
+      await navigator.clipboard.writeText(ps);
+      alert("PowerShell request copied");
+    } catch (e) {
+      alert("Copy failed");
+    }
+  };
+
   const getErrorText = (e: unknown): string => {
     if (!e) return "";
     if (e instanceof Error) return e.message;
@@ -792,6 +835,12 @@ export default function ServiceBuilderV2Page() {
             <div className="flex gap-3">
               <button onClick={onPreview} className="px-6 py-2 bg-blue-600 text-white rounded font-medium">
                 Preview Quote
+              </button>
+              <button onClick={copyAsCurl} className="px-6 py-2 bg-gray-700 text-white rounded font-medium">
+                Copy cURL
+              </button>
+              <button onClick={copyAsPowerShell} className="px-6 py-2 bg-gray-700 text-white rounded font-medium">
+                Copy PowerShell
               </button>
               <button onClick={onSave} 
                 disabled={!preview || !invariantCheck?.matches}
