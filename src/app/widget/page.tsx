@@ -352,7 +352,8 @@ export default function WidgetPage() {
                       {q.type === "checkbox_multi" && (
                         <div className="space-y-1">
                           {(q as DynCheckboxMulti).options?.map(opt => {
-                            const arr: string[] = Array.isArray(answers[q.key]) ? answers[q.key] : [];
+                            const raw = answers[q.key];
+                            const arr: string[] = Array.isArray(raw) ? (raw as unknown[]).filter((v): v is string => typeof v === "string") : [];
                             const on = arr.includes(opt.value);
                             return (
                               <label key={opt.value} className="flex items-center gap-2 text-sm">
