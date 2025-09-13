@@ -97,15 +97,15 @@ export default function ServiceBuilderV2() {
   }, [serviceId, tenantId]);
 
   function normalizeConfig(cfg: unknown): ServiceConfig {
-    const config = cfg as Record<string, unknown>;
+    const config = cfg as Record<string, unknown> | null;
     return {
-      currency: config?.currency ?? "SEK",
-      rutEligible: config?.rutEligible ?? true,
+      currency: (config?.currency as string | undefined) ?? "SEK",
+      rutEligible: (config?.rutEligible as boolean | undefined) ?? true,
       hourlyRate: typeof config?.hourlyRate === "number" ? config.hourlyRate : 1100,
-      areaToHours: config?.areaToHours ?? { "50": 3 },
-      frequencyOptions: Array.isArray(config?.frequencyOptions) ? config.frequencyOptions : [],
-      dynamicQuestions: Array.isArray(config?.dynamicQuestions) ? config.dynamicQuestions : [],
-      fees: Array.isArray(config?.fees) ? config.fees : [],
+      areaToHours: (config?.areaToHours as Record<string, number> | undefined) ?? { "50": 3 },
+      frequencyOptions: Array.isArray(config?.frequencyOptions) ? config.frequencyOptions as FrequencyOption[] : [],
+      dynamicQuestions: Array.isArray(config?.dynamicQuestions) ? config.dynamicQuestions as DynamicQuestion[] : [],
+      fees: Array.isArray(config?.fees) ? config.fees as Fee[] : [],
     };
   }
 
