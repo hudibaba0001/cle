@@ -159,7 +159,22 @@ export default function ServiceBuilderV2Page() {
   });
   const [slug, setSlug] = useState<string>(slugify("Universal Multiplier Demo"));
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
-  const [err, setErr] = useState<Record<string, unknown> | null>(null);
+  const [err, setErr] = useState<unknown>(null);
+
+  const getErrorText = (e: unknown): string => {
+    if (!e) return "";
+    if (e instanceof Error) return e.message;
+    if (typeof e === "string") return e;
+    try {
+      const anyErr = e as { error?: unknown; detail?: unknown; message?: unknown };
+      if (anyErr?.message && typeof anyErr.message === 'string') return anyErr.message;
+      const parts = [anyErr?.error, anyErr?.detail].filter(Boolean).map(v => String(v));
+      if (parts.length) return parts.join(" · ");
+      return JSON.stringify(e);
+    } catch {
+      return String(e);
+    }
+  };
 
   const inputs = useMemo(() => {
     if (state.model === "windows") {
@@ -446,7 +461,7 @@ export default function ServiceBuilderV2Page() {
         hourTiers: [],
         dynamicQuestions: [],
       });
-      setSlug("");
+      setSlug(slugify("New Service"));
       setPreview(null);
       
     } catch (e) {
@@ -695,7 +710,7 @@ export default function ServiceBuilderV2Page() {
               </button>
             </div>
             {err && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
-              Error: {JSON.stringify(err)}
+              Error: {getErrorText(err)}
             </div>}
           </div>
         
@@ -750,7 +765,7 @@ export default function ServiceBuilderV2Page() {
               {state.dynamicQuestions.map((q, i) => (
                 <div key={`${q.type}_${q.key}_${i}`} className="border rounded p-3">
                   <div className="grid grid-cols-6 gap-2 items-center mb-2">
-                    <select className="border rounded px-2 py-1" value={q.type} onChange={e=>{
+                    <select className="border rounded px-2 py-1" title="Question type" value={q.type} onChange={e=>{
                       const t = e.target.value as DynQuestionUI["type"]; 
                       const base = { key: q.key, label: q.label } as { key: string; label: string };
                       const next: DynQuestionUI = t === 'checkbox' ? { type:'checkbox', ...base } : t === 'radio' ? { type:'radio', ...base, options: [] } : t === 'checkbox_multi' ? { type:'checkbox_multi', ...base, options: [] } : { type:'text', ...base };
@@ -770,16 +785,16 @@ export default function ServiceBuilderV2Page() {
                   {q.type === 'checkbox' && (
                     <div className="grid grid-cols-6 gap-2 items-center">
                       <label className="text-xs flex items-center gap-2"><input type="checkbox" checked={(q.impact?.enabled ?? true)} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? { targetUI:'subtotal', mode:'percent', value:10, direction:'increase' }), enabled: e.target.checked } } as DynQuestionUI)} /> Enable impact</label>
-                      <select className="border rounded px-2 py-1" value={q.impact?.targetUI ?? 'subtotal'} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), targetUI: e.target.value as DynImpactUI['targetUI'] } } as DynQuestionUI)}>
+                      <select className="border rounded px-2 py-1" title="Impact target" value={q.impact?.targetUI ?? 'subtotal'} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), targetUI: e.target.value as DynImpactUI['targetUI'] } } as DynQuestionUI)}>
                         <option value="subtotal">Subtotal</option>
                         <option value="base">Base after frequency</option>
                       </select>
-                      <select className="border rounded px-2 py-1" value={q.impact?.mode ?? 'percent'} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), mode: e.target.value as DynImpactUI['mode'] } } as DynQuestionUI)}>
+                      <select className="border rounded px-2 py-1" title="Impact mode" value={q.impact?.mode ?? 'percent'} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), mode: e.target.value as DynImpactUI['mode'] } } as DynQuestionUI)}>
                         <option value="percent">Percent</option>
                         <option value="fixed">Fixed</option>
                       </select>
                       <input type="number" className="border rounded px-2 py-1" placeholder="Value" value={q.impact?.value ?? 0} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), value: Number(e.target.value) } } as DynQuestionUI)} />
-                      <select className="border rounded px-2 py-1" value={q.impact?.direction ?? 'increase'} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), direction: e.target.value as DynImpactUI['direction'] } } as DynQuestionUI)}>
+                      <select className="border rounded px-2 py-1" title="Impact direction" value={q.impact?.direction ?? 'increase'} onChange={e=>updateDynQuestion(i, { ...q, impact: { ...(q.impact ?? {}), direction: e.target.value as DynImpactUI['direction'] } } as DynQuestionUI)}>
                         <option value="increase">Increase</option>
                         <option value="decrease">Decrease</option>
                       </select>
@@ -798,13 +813,13 @@ export default function ServiceBuilderV2Page() {
                           <input className="border rounded px-2 py-1 col-span-2" placeholder="Label" value={opt.label} onChange={e=>{
                             const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, label: e.target.value } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }} />
-                          <select className="border rounded px-2 py-1" value={opt.impact?.targetUI ?? 'subtotal'} onChange={e=>{
+                          <select className="border rounded px-2 py-1" title="Option impact target" value={opt.impact?.targetUI ?? 'subtotal'} onChange={e=>{
                             const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), targetUI: e.target.value as DynImpactUI['targetUI'] } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }}>
                             <option value="subtotal">Subtotal</option>
                             <option value="base">Base after frequency</option>
                           </select>
-                          <select className="border rounded px-2 py-1" value={opt.impact?.mode ?? 'percent'} onChange={e=>{
+                          <select className="border rounded px-2 py-1" title="Option impact mode" value={opt.impact?.mode ?? 'percent'} onChange={e=>{
                             const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), mode: e.target.value as DynImpactUI['mode'] } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }}>
                             <option value="percent">Percent</option>
@@ -813,7 +828,7 @@ export default function ServiceBuilderV2Page() {
                           <input type="number" className="border rounded px-2 py-1" placeholder="Value" value={opt.impact?.value ?? 0} onChange={e=>{
                             const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), value: Number(e.target.value) } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }} />
-                          <select className="border rounded px-2 py-1" value={opt.impact?.direction ?? 'increase'} onChange={e=>{
+                          <select className="border rounded px-2 py-1" title="Option impact direction" value={opt.impact?.direction ?? 'increase'} onChange={e=>{
                             const next = { ...q, options: q.options.map((o, j)=> j===oi ? { ...o, impact: { ...(o.impact ?? {}), direction: e.target.value as DynImpactUI['direction'] } } : o) } as DynQuestionUI; updateDynQuestion(i, next);
                           }}>
                             <option value="increase">Increase</option>
