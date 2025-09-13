@@ -56,7 +56,7 @@ interface QuoteBody {
   service_id: string;
   frequency: FrequencyKey;
   inputs: Record<string, number | string | boolean | null>;
-  answers: Record<string, any>;
+  answers: Record<string, unknown>;
   applyRUT: boolean;
   coupon?: { code: string; type: "percent" | "fixed"; value: number };
 }
@@ -76,8 +76,8 @@ interface QuoteResponse {
 interface BookingBody {
   service_id: string;
   frequency: FrequencyKey;
-  inputs: Record<string, any>;
-  answers: Record<string, any>;
+  inputs: Record<string, unknown>;
+  answers: Record<string, unknown>;
   customer: { name: string; email: string; phone: string; address: { street: string; city: string; postal_code: string } };
 }
 
@@ -144,7 +144,7 @@ export default function WidgetPage() {
   // Frequency + Inputs + Answers
   const [frequency, setFrequency] = useState<FrequencyKey>("monthly");
   const [area, setArea] = useState<number>(50);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [applyRUT, setApplyRUT] = useState<boolean>(true);
   const [coupon, setCoupon] = useState<string>("");
 
@@ -190,7 +190,7 @@ export default function WidgetPage() {
   }, [selectedService]);
 
   // Answers helpers
-  function updateAnswer(key: string, value: any) {
+  function updateAnswer(key: string, value: unknown) {
     setAnswers(prev => ({ ...prev, [key]: value }));
   }
 
@@ -210,9 +210,9 @@ export default function WidgetPage() {
     try {
       const q = await fetchJson<QuoteResponse>("/api/public/quote", tenantId, { method: "POST", body: JSON.stringify(body) });
       setQuote(q);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setQuote(undefined);
-      setQuoteError(e?.message || String(e));
+      setQuoteError((e as Error)?.message || String(e));
     } finally { setQuoting(false); }
   }
 
@@ -242,9 +242,9 @@ export default function WidgetPage() {
       if (!res.ok) throw new Error(await res.text());
       const data: BookingResponse = await res.json();
       setBooking(data);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setBooking(undefined);
-      setBookingError(e?.message || String(e));
+      setBookingError((e as Error)?.message || String(e));
     }
   }
 
