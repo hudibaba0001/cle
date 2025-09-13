@@ -1,6 +1,5 @@
-import { cookies } from "next/headers";
 import Link from "next/link";
-import { createServerClient } from "@supabase/auth-helpers-nextjs";
+import { supabaseAdmin } from "@/lib/supabase/server";
 import AddServiceButton from "./AddServiceButton";
 
 type ServiceRow = {
@@ -49,12 +48,7 @@ export default async function ServiceManagerPage({
 }: {
   searchParams: { [k: string]: string | string[] | undefined };
 }) {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (name: string) => cookieStore.get(name)?.value } }
-  );
+  const supabase = supabaseAdmin();
 
   const { data: services, error } = await supabase
     .from("services")
