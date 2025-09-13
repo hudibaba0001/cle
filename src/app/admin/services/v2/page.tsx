@@ -435,11 +435,29 @@ export default function ServiceBuilderV2Page() {
       });
       
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         if (response.status === 409) {
+          // Try to find an existing service by slug and update it
+          const list = await fetch('/api/admin/services', { headers: { 'x-tenant-id': tenant } }).then(r=>r.json()).catch(()=>({items:[]}));
+          const match = (list?.items ?? []).find((it: { slug?: string; id?: string }) => it?.slug === slug);
+          if (match?.id) {
+            const put = await fetch(`/api/admin/services/${match.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenant },
+              body: JSON.stringify({ name: service.name, slug, active: true, config: service })
+            });
+            if (!put.ok) {
+              const e2 = await put.json().catch(()=>({}));
+              throw new Error(e2?.error || 'Update failed after conflict');
+            }
+            const ok = await put.json();
+            alert(`Service updated successfully! ID: ${ok.id}`);
+            setPreview(null);
+            return;
+          }
           throw new Error('Slug already exists for this tenant. Change Service Name or Slug and try again.');
         }
-        throw new Error(error.error || 'Failed to save service');
+        throw new Error(error?.error || 'Failed to save service');
       }
       
       const result = await response.json();
@@ -465,7 +483,7 @@ export default function ServiceBuilderV2Page() {
       setPreview(null);
       
     } catch (e) {
-      setErr(e as Record<string, unknown>);
+      setErr(e);
     }
   }
 
