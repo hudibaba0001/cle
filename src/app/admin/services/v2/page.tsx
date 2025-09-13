@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+// Using ts-expect-error here to suppress transient type-resolver warnings in CI.
 // @ts-expect-error
 import React from "react";
 // @ts-expect-error
