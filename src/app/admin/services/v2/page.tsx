@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-// @ts-ignore
+// @ts-expect-error
 import React from "react";
-// @ts-ignore
+// @ts-expect-error
 import { useSearchParams } from "next/navigation";
 
 type PricingModel = "fixed_tier" | "tiered_multiplier" | "universal_multiplier" | "windows" | "hourly" | "per_room";
