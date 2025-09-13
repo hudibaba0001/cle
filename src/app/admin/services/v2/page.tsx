@@ -727,7 +727,7 @@ export default function ServiceBuilderV2Page() {
                 Save Service
               </button>
             </div>
-            {err && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+            {!!err && <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
               Error: {getErrorText(err)}
             </div>}
           </div>
