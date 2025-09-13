@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-// Using ts-expect-error to silence transient type resolver issues in CI; JSX runtime does not require React import
-// @ts-expect-error: React types may be unavailable in CI cache; safe to import for JSX
 import React from "react";
-// Using ts-expect-error to silence transient type resolver issues for next/navigation types in CI
-// @ts-expect-error: next/navigation types may not resolve in certain CI environments
 import { useSearchParams } from "next/navigation";
 
 type PricingModel = "fixed_tier" | "tiered_multiplier" | "universal_multiplier" | "windows" | "hourly" | "per_room";
