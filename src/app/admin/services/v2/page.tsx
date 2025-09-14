@@ -31,6 +31,12 @@ type ServiceConfig = {
   frequencyOptions: FrequencyOption[];
   dynamicQuestions: DynamicQuestion[];
   fees: Fee[];
+  // Model-specific optional configs
+  fixed_tier?: { tiers: { min: number; max: number; price_minor: number }[] };
+  tiered_multiplier?: { rateTiers: { min: number; max: number; ratePerSqm: number }[] };
+  universal_multiplier?: { ratePerSqm: number };
+  windows?: { types: { key: string; name: string; pricePerUnit: number }[] };
+  per_room?: { roomTypes: { key: string; name: string; pricePerRoom: number }[] };
 };
 
 type ServiceRow = {
@@ -253,6 +259,79 @@ function ServiceBuilderV2() {
     });
   }
 
+  // --- Model helpers ---
+  function handleModelChange(m: PricingModel) {
+    const cfg: ServiceConfig = { ...svc.config };
+    if (m === "fixed_tier" && !cfg.fixed_tier) cfg.fixed_tier = { tiers: [] };
+    if (m === "tiered_multiplier" && !cfg.tiered_multiplier) cfg.tiered_multiplier = { rateTiers: [] };
+    if (m === "universal_multiplier" && !cfg.universal_multiplier) cfg.universal_multiplier = { ratePerSqm: 0 };
+    if (m === "windows" && !cfg.windows) cfg.windows = { types: [] };
+    if (m === "per_room" && !cfg.per_room) cfg.per_room = { roomTypes: [] };
+    up({ model: m, config: cfg });
+    setTab("pricing");
+  }
+
+  // fixed_tier
+  function addFixedTier() {
+    const tiers = svc.config.fixed_tier?.tiers ?? [];
+    up({ config: { ...svc.config, fixed_tier: { tiers: [...tiers, { min: 1, max: 50, price_minor: 3000 }] } } });
+  }
+  function editFixedTier(index: number, patch: Partial<{ min: number; max: number; price_minor: number }>) {
+    const tiers = (svc.config.fixed_tier?.tiers ?? []).map((t, i) => (i === index ? { ...t, ...patch } : t));
+    up({ config: { ...svc.config, fixed_tier: { tiers } } });
+  }
+  function removeFixedTier(index: number) {
+    const tiers = (svc.config.fixed_tier?.tiers ?? []).filter((_, i) => i !== index);
+    up({ config: { ...svc.config, fixed_tier: { tiers } } });
+  }
+
+  // tiered_multiplier
+  function addRateTier() {
+    const rateTiers = svc.config.tiered_multiplier?.rateTiers ?? [];
+    up({ config: { ...svc.config, tiered_multiplier: { rateTiers: [...rateTiers, { min: 1, max: 50, ratePerSqm: 50 }] } } });
+  }
+  function editRateTier(index: number, patch: Partial<{ min: number; max: number; ratePerSqm: number }>) {
+    const rateTiers = (svc.config.tiered_multiplier?.rateTiers ?? []).map((t, i) => (i === index ? { ...t, ...patch } : t));
+    up({ config: { ...svc.config, tiered_multiplier: { rateTiers } } });
+  }
+  function removeRateTier(index: number) {
+    const rateTiers = (svc.config.tiered_multiplier?.rateTiers ?? []).filter((_, i) => i !== index);
+    up({ config: { ...svc.config, tiered_multiplier: { rateTiers } } });
+  }
+
+  // universal_multiplier
+  function setUniversalRate(val: number) {
+    up({ config: { ...svc.config, universal_multiplier: { ratePerSqm: val } } });
+  }
+
+  // windows
+  function addWindowType() {
+    const types = svc.config.windows?.types ?? [];
+    up({ config: { ...svc.config, windows: { types: [...types, { key: `type_${rand()}`, name: "4 panes", pricePerUnit: 99 }] } } });
+  }
+  function editWindowType(index: number, patch: Partial<{ key: string; name: string; pricePerUnit: number }>) {
+    const types = (svc.config.windows?.types ?? []).map((t, i) => (i === index ? { ...t, ...patch } : t));
+    up({ config: { ...svc.config, windows: { types } } });
+  }
+  function removeWindowType(index: number) {
+    const types = (svc.config.windows?.types ?? []).filter((_, i) => i !== index);
+    up({ config: { ...svc.config, windows: { types } } });
+  }
+
+  // per_room
+  function addRoomType() {
+    const roomTypes = svc.config.per_room?.roomTypes ?? [];
+    up({ config: { ...svc.config, per_room: { roomTypes: [...roomTypes, { key: `room_${rand()}`, name: "Bedroom", pricePerRoom: 2500 }] } } });
+  }
+  function editRoomType(index: number, patch: Partial<{ key: string; name: string; pricePerRoom: number }>) {
+    const roomTypes = (svc.config.per_room?.roomTypes ?? []).map((t, i) => (i === index ? { ...t, ...patch } : t));
+    up({ config: { ...svc.config, per_room: { roomTypes } } });
+  }
+  function removeRoomType(index: number) {
+    const roomTypes = (svc.config.per_room?.roomTypes ?? []).filter((_, i) => i !== index);
+    up({ config: { ...svc.config, per_room: { roomTypes } } });
+  }
+
   return (
     <Suspense fallback={<div className="p-6">Loading…</div>}>
     <div className="mx-auto max-w-6xl p-6 space-y-6">
@@ -274,7 +353,7 @@ function ServiceBuilderV2() {
           <input aria-label="Service name" className="w-full rounded-xl border p-2 text-sm" value={svc.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => up({ name: e.target.value })} />
 
           <label className="text-sm mt-2">Pricing model</label>
-          <select aria-label="Pricing model" className="w-full rounded-xl border p-2 text-sm" value={svc.model} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => up({ model: e.target.value as PricingModel })}>
+          <select aria-label="Pricing model" className="w-full rounded-xl border p-2 text-sm" value={svc.model} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleModelChange(e.target.value as PricingModel)}>
             <option value="hourly">Hourly</option>
             <option value="fixed_tier">Fixed Tier</option>
             <option value="tiered_multiplier">Tiered Multiplier</option>
