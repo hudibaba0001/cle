@@ -159,8 +159,8 @@ function FormBuilder() {
       </div>
 
       <div className="flex gap-2 overflow-x-auto">
-        {[["basics","Basics"],["zip","ZIP rules"],["services","Services"],["fields","Fields"],["review","Review & Publish"],["install","Install"]].map(([k,label])=> (
-          <button key={k} onClick={()=>setTab(k as any)} className={`rounded-xl px-3 py-2 text-sm border ${tab===k ? "bg-white shadow-sm" : "bg-neutral-50 hover:bg-neutral-100"}`} aria-current={tab===k?"page":undefined}>{label}</button>
+        {[ ["basics","Basics"],["zip","ZIP rules"],["services","Services"],["fields","Fields"],["review","Review & Publish"],["install","Install"]].map(([k,label])=> (
+          <button key={k} onClick={()=>setTab(k as typeof tab)} className={`rounded-xl px-3 py-2 text-sm border ${tab===k ? "bg-white shadow-sm" : "bg-neutral-50 hover:bg-neutral-100"}`} aria-current={tab===k?"page":undefined}>{label}</button>
         ))}
       </div>
 

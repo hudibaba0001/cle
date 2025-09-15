@@ -1,14 +1,3 @@
-export const dynamic = "force-dynamic";
-export default function BookingsList() {
-  return (
-    <div className="space-y-2">
-      <h1 className="text-xl font-semibold">Bookings</h1>
-      <p className="text-sm text-neutral-600">View and manage bookings. (Placeholder)</p>
-      <div className="rounded-xl border p-4 text-sm text-neutral-600">Table placeholder.</div>
-    </div>
-  );
-}
-
 "use client";
 import React, { useEffect, useState, useCallback } from "react";
 
