@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
+// redeploy: noop comment
+
 type PricingModel = "fixed_tier" | "tiered_multiplier" | "universal_multiplier" | "windows" | "hourly" | "per_room";
 
 type FrequencyOption = { key: string; label: string; multiplier: number };
