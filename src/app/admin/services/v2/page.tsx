@@ -119,10 +119,12 @@ function ServiceBuilderV2() {
       try {
         const res = await fetch(`/api/admin/services/${serviceId}`, { headers: { "x-tenant-id": tenantId }, cache: "no-store" });
         if (!res.ok) return;
-        const row = await res.json() as { id: string; name: string; model: PricingModel; active: boolean; config: unknown };
+        const row = await res.json() as { id: string; name: string; model: string; active: boolean; config: unknown };
         if (row?.id) {
           const cfg = normalizeConfig(row.config);
-          setSvc({ id: row.id, name: row.name ?? "", model: row.model ?? "hourly", active: !!row.active, config: cfg });
+          const incomingModel = (row.model || "hourly") as string;
+          const modelForBuilder = (incomingModel === "hourly_area" ? "hourly" : incomingModel) as PricingModel;
+          setSvc({ id: row.id, name: row.name ?? "", model: modelForBuilder, active: !!row.active, config: cfg });
           setDirty(false);
         }
       } catch (e) {
@@ -134,7 +136,7 @@ function ServiceBuilderV2() {
 
   function normalizeConfig(cfg: unknown): ServiceConfig {
     const c = (cfg ?? {}) as Record<string, unknown>;
-    const model = (c.model as string | undefined) as PricingModel | undefined;
+    const model = (c.model as unknown) as PricingModel | "hourly_area" | undefined;
 
     const base: ServiceConfig = {
       currency: "SEK",
