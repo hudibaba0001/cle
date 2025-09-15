@@ -108,16 +108,16 @@ function ServiceBuilderV2() {
   const [quoting, setQuoting] = useState(false);
   const [quote, setQuote] = useState<QuoteRes | null>(null);
   const [previewFreq, setPreviewFreq] = useState<string>("every_3_weeks");
+  const [previewArea, setPreviewArea] = useState<number>(50);
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const load = async () => {
       if (!serviceId || !tenantId) return;
       try {
-        const res = await fetch(`/api/admin/services`, { headers: { "x-tenant-id": tenantId }, cache: "no-store" });
+        const res = await fetch(`/api/admin/services/${serviceId}`, { headers: { "x-tenant-id": tenantId }, cache: "no-store" });
         if (!res.ok) return;
-        const arr = await res.json();
-        const row = Array.isArray(arr) ? arr.find((x: Record<string, unknown>) => x.id === serviceId) : undefined;
+        const row = await res.json() as { id: string; name: string; model: PricingModel; active: boolean; config: unknown };
         if (row?.id) {
           const cfg = normalizeConfig(row.config);
           setSvc({ id: row.id, name: row.name ?? "", model: row.model ?? "hourly", active: !!row.active, config: cfg });
@@ -131,27 +131,89 @@ function ServiceBuilderV2() {
   }, [serviceId, tenantId]);
 
   function normalizeConfig(cfg: unknown): ServiceConfig {
-    const config = cfg as Record<string, unknown> | null;
-    if (config === null) {
-      return {
-        currency: "SEK",
-        rutEligible: true,
-        hourlyRate: 1100,
-        areaToHours: { "50": 3 },
-        frequencyOptions: [],
-        dynamicQuestions: [],
-        fees: [],
-      };
-    }
-    return {
-      currency: (config.currency as string | undefined) ?? "SEK",
-      rutEligible: (config.rutEligible as boolean | undefined) ?? true,
-      hourlyRate: typeof config.hourlyRate === "number" ? config.hourlyRate : 1100,
-      areaToHours: (config.areaToHours as Record<string, number> | undefined) ?? { "50": 3 },
-      frequencyOptions: Array.isArray(config.frequencyOptions) ? config.frequencyOptions as FrequencyOption[] : [],
-      dynamicQuestions: Array.isArray(config.dynamicQuestions) ? config.dynamicQuestions as DynamicQuestion[] : [],
-      fees: Array.isArray(config.fees) ? config.fees as Fee[] : [],
+    const c = (cfg ?? {}) as Record<string, unknown>;
+    const model = (c.model as string | undefined) as PricingModel | undefined;
+
+    const base: ServiceConfig = {
+      currency: "SEK",
+      rutEligible: (c.rutEligible as boolean | undefined) ?? true,
+      hourlyRate: typeof c.hourlyRate === "number" ? c.hourlyRate : 1100,
+      areaToHours: { "50": 3 },
+      frequencyOptions: Array.isArray(c.frequencyOptions) ? (c.frequencyOptions as FrequencyOption[]) : [],
+      dynamicQuestions: Array.isArray(c.dynamicQuestions) ? (c.dynamicQuestions as DynamicQuestion[]) : [],
+      fees: Array.isArray(c.fees)
+        ? ((c.fees as unknown[]).map((f) => {
+            const fr = f as Record<string, unknown>;
+            return {
+              key: String(fr.key ?? "fee_" + rand()),
+              label: String(fr.name ?? fr.label ?? "Fee"),
+              amount_minor: Math.round(Number(fr.amount ?? 0) * 100),
+              rut_eligible: Boolean(fr.rutEligible ?? fr.rut_eligible ?? false),
+              apply: "always",
+            } as Fee;
+          }))
+        : [],
     };
+
+    // Map model-specific blocks back to builder shape
+    if (model === "fixed_tier") {
+      const tiers = Array.isArray(c.tiers)
+        ? (c.tiers as Array<Record<string, unknown>>).map((t) => ({
+            min: Number(t.min ?? 0),
+            max: Number(t.max ?? 0),
+            price_minor: Math.round(Number(t.price ?? 0) * 100),
+          }))
+        : [];
+      base.fixed_tier = { tiers };
+    }
+    if (model === "tiered_multiplier") {
+      const tiers = Array.isArray(c.tiers)
+        ? (c.tiers as Array<Record<string, unknown>>).map((t) => ({
+            min: Number(t.min ?? 0),
+            max: Number(t.max ?? 0),
+            ratePerSqm: Number(t.ratePerSqm ?? 0),
+          }))
+        : [];
+      base.tiered_multiplier = { rateTiers: tiers };
+    }
+    if (model === "universal_multiplier") {
+      base.universal_multiplier = { ratePerSqm: Number(c.ratePerSqm ?? 0) };
+    }
+    if (model === "windows") {
+      const types = Array.isArray(c.windowTypes)
+        ? (c.windowTypes as Array<Record<string, unknown>>).map((t) => ({
+            key: String(t.key ?? "type_" + rand()),
+            name: String(t.name ?? "Type"),
+            pricePerUnit: Number(t.pricePerUnit ?? 0),
+          }))
+        : [];
+      base.windows = { types };
+    }
+    if (model === "per_room") {
+      const roomTypes = Array.isArray(c.roomTypes)
+        ? (c.roomTypes as Array<Record<string, unknown>>).map((t) => ({
+            key: String(t.key ?? "room_" + rand()),
+            name: String(t.name ?? "Room"),
+            pricePerRoom: Number(t.pricePerRoom ?? 0),
+          }))
+        : [];
+      base.per_room = { roomTypes };
+    }
+    if (model === "hourly_area") {
+      // Convert array to compact map using 'max' as key
+      const arr = Array.isArray(c.areaToHours)
+        ? (c.areaToHours as Array<Record<string, unknown>>)
+        : [];
+      const map: Record<string, number> = {};
+      for (const it of arr) {
+        const max = Number(it.max ?? 0);
+        const hours = Number(it.hours ?? 0);
+        if (max > 0) map[String(max)] = hours;
+      }
+      base.hourlyRate = Number(c.hourlyRate ?? base.hourlyRate ?? 1100);
+      base.areaToHours = Object.keys(map).length ? map : { "50": 3 };
+    }
+    return base;
   }
 
   function up(patch: Partial<ServiceRow>) {
@@ -162,12 +224,84 @@ function ServiceBuilderV2() {
     });
   }
 
+  function buildPersistConfig(): Record<string, unknown> {
+    const model = svc.model === "hourly" ? "hourly_area" : svc.model;
+    const base: Record<string, unknown> = {
+      model,
+      name: svc.name,
+      rutEligible: !!svc.config.rutEligible,
+      fees: (svc.config.fees ?? []).map((f) => ({
+        key: f.key,
+        name: f.label,
+        amount: (f.amount_minor ?? 0) / 100,
+        rutEligible: !!f.rut_eligible,
+      })),
+      // Keep modifiers empty; dynamicQuestions are compiled at quote time
+      modifiers: [],
+      frequencyMultipliers: { one_time: 1.0, weekly: 1.0, biweekly: 1.15, monthly: 1.4 },
+      // v2.1 extensions
+      frequencyOptions: svc.config.frequencyOptions ?? [],
+      dynamicQuestions: svc.config.dynamicQuestions ?? [],
+    };
+
+    if (model === "fixed_tier") {
+      base.tiers = (svc.config.fixed_tier?.tiers ?? []).map((t) => ({
+        min: Number(t.min || 0),
+        max: Number(t.max || 0),
+        price: (Number(t.price_minor || 0)) / 100,
+      }));
+    }
+    if (model === "tiered_multiplier") {
+      base.tiers = (svc.config.tiered_multiplier?.rateTiers ?? []).map((t) => ({
+        min: Number(t.min || 0),
+        max: Number(t.max || 0),
+        ratePerSqm: Number(t.ratePerSqm || 0),
+      }));
+      base.minimum = 0;
+    }
+    if (model === "universal_multiplier") {
+      base.ratePerSqm = Number(svc.config.universal_multiplier?.ratePerSqm || 0);
+      base.minimum = 0;
+    }
+    if (model === "windows") {
+      base.windowTypes = (svc.config.windows?.types ?? []).map((t) => ({
+        key: t.key,
+        name: t.name,
+        pricePerUnit: Number(t.pricePerUnit || 0),
+      }));
+      base.minimum = 0;
+    }
+    if (model === "per_room") {
+      base.roomTypes = (svc.config.per_room?.roomTypes ?? []).map((t) => ({
+        key: t.key,
+        name: t.name,
+        pricePerRoom: Number(t.pricePerRoom || 0),
+      }));
+      base.minimum = 0;
+    }
+    if (model === "hourly_area") {
+      base.hourlyRate = Number(svc.config.hourlyRate || 0);
+      const map = svc.config.areaToHours ?? { "50": 3 };
+      const entries = Object.entries(map)
+        .map(([k, hours]) => ({ max: Number(k), hours: Number(hours), min: 0 }))
+        .filter((x) => x.max > 0 && x.hours > 0)
+        .sort((a, b) => a.max - b.max);
+      // fill min from previous max
+      let prevMax = 0;
+      for (const it of entries) { it.min = prevMax; prevMax = it.max; }
+      base.areaToHours = entries.map((e) => ({ min: e.min, max: e.max, hours: e.hours }));
+      base.minimum = 0;
+    }
+    return base;
+  }
+
   async function save(): Promise<string | null> {
     setError(null);
     if (!tenantId) { setError("TENANT_ID_REQUIRED"); return null; }
     setSaving(true);
     try {
-      const body = JSON.stringify({ name: svc.name, model: svc.model, active: svc.active, config: svc.config });
+      const configToSave = buildPersistConfig();
+      const body = JSON.stringify({ name: svc.name, active: svc.active, config: configToSave });
       if (!svc.id) {
         const res = await fetch("/api/admin/services", { method: "POST", headers: { "Content-Type": "application/json", "x-tenant-id": tenantId }, body });
         if (!res.ok) throw await toErr(res);
@@ -200,10 +334,13 @@ function ServiceBuilderV2() {
     setQuoting(true);
     try {
       const payload = {
+        tenant: { currency: svc.config.currency || "SEK", vat_rate: 25, rut_enabled: !!svc.config.rutEligible },
         service_id: svc.id,
-        currency: svc.config.currency || "SEK",
-        rut: !!svc.config.rutEligible,
         frequency: previewFreq,
+        inputs: { area: previewArea },
+        addons: [] as Array<{ key: string; quantity?: number }>,
+        applyRUT: !!svc.config.rutEligible,
+        coupon: undefined as unknown,
         answers: Object.fromEntries(Object.entries(previewAnswers).filter(([, v]) => v === true)),
       };
       const res = await fetch("/api/public/quote", { method: "POST", headers: { "Content-Type": "application/json", "x-tenant-id": tenantId }, body: JSON.stringify(payload) });
@@ -268,7 +405,6 @@ function ServiceBuilderV2() {
     if (m === "windows" && !cfg.windows) cfg.windows = { types: [] };
     if (m === "per_room" && !cfg.per_room) cfg.per_room = { roomTypes: [] };
     up({ model: m, config: cfg });
-    setTab("pricing");
   }
 
   // fixed_tier
@@ -376,6 +512,82 @@ function ServiceBuilderV2() {
               </div>
             </div>
           )}
+
+          {svc.model === "fixed_tier" && (
+            <div className="space-y-2">
+              <label className="text-sm">Fixed tiers</label>
+              {(svc.config.fixed_tier?.tiers ?? []).map((t, i) => (
+                <div key={i} className="grid grid-cols-4 gap-2 items-center">
+                  <input aria-label="Tier min" type="number" className="rounded-xl border p-2 text-sm" value={t.min}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => editFixedTier(i, { min: Number(e.target.value) || 0 })} />
+                  <input aria-label="Tier max" type="number" className="rounded-xl border p-2 text-sm" value={t.max}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => editFixedTier(i, { max: Number(e.target.value) || 0 })} />
+                  <input aria-label="Tier price (minor)" type="number" className="rounded-xl border p-2 text-sm" value={t.price_minor}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => editFixedTier(i, { price_minor: Number(e.target.value) || 0 })} />
+                  <button className="text-sm rounded-xl border px-2 py-1" onClick={() => removeFixedTier(i)}>Remove</button>
+                </div>
+              ))}
+              <button className="text-sm rounded-xl border px-2 py-1" onClick={addFixedTier}>+ Add tier</button>
+            </div>
+          )}
+
+          {svc.model === "tiered_multiplier" && (
+            <div className="space-y-2">
+              <label className="text-sm">Rate tiers (per sqm)</label>
+              {(svc.config.tiered_multiplier?.rateTiers ?? []).map((t, i) => (
+                <div key={i} className="grid grid-cols-4 gap-2 items-center">
+                  <input aria-label="Min sqm" type="number" className="rounded-xl border p-2 text-sm" value={t.min}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => editRateTier(i, { min: Number(e.target.value) || 0 })} />
+                  <input aria-label="Max sqm" type="number" className="rounded-xl border p-2 text-sm" value={t.max}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => editRateTier(i, { max: Number(e.target.value) || 0 })} />
+                  <input aria-label="Rate per sqm" type="number" className="rounded-xl border p-2 text-sm" value={t.ratePerSqm}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => editRateTier(i, { ratePerSqm: Number(e.target.value) || 0 })} />
+                  <button className="text-sm rounded-xl border px-2 py-1" onClick={() => removeRateTier(i)}>Remove</button>
+                </div>
+              ))}
+              <button className="text-sm rounded-xl border px-2 py-1" onClick={addRateTier}>+ Add rate tier</button>
+            </div>
+          )}
+
+          {svc.model === "universal_multiplier" && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-sm">Rate per sqm</label>
+                <input aria-label="Rate per sqm" type="number" className="w-full rounded-xl border p-2 text-sm" value={svc.config.universal_multiplier?.ratePerSqm ?? 0}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUniversalRate(Number(e.target.value) || 0)} />
+              </div>
+            </div>
+          )}
+
+          {svc.model === "windows" && (
+            <div className="space-y-2">
+              <label className="text-sm">Window types</label>
+              {(svc.config.windows?.types ?? []).map((t, i) => (
+                <div key={t.key} className="grid grid-cols-4 gap-2 items-center">
+                  <input aria-label="Type key" className="rounded-xl border p-2 text-sm" value={t.key} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editWindowType(i, { key: e.target.value })} />
+                  <input aria-label="Type name" className="rounded-xl border p-2 text-sm" value={t.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editWindowType(i, { name: e.target.value })} />
+                  <input aria-label="Price per unit" type="number" className="rounded-xl border p-2 text-sm" value={t.pricePerUnit} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editWindowType(i, { pricePerUnit: Number(e.target.value) || 0 })} />
+                  <button className="text-sm rounded-xl border px-2 py-1" onClick={() => removeWindowType(i)}>Remove</button>
+                </div>
+              ))}
+              <button className="text-sm rounded-xl border px-2 py-1" onClick={addWindowType}>+ Add window type</button>
+            </div>
+          )}
+
+          {svc.model === "per_room" && (
+            <div className="space-y-2">
+              <label className="text-sm">Room types</label>
+              {(svc.config.per_room?.roomTypes ?? []).map((t, i) => (
+                <div key={t.key} className="grid grid-cols-4 gap-2 items-center">
+                  <input aria-label="Room key" className="rounded-xl border p-2 text-sm" value={t.key} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editRoomType(i, { key: e.target.value })} />
+                  <input aria-label="Room name" className="rounded-xl border p-2 text-sm" value={t.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editRoomType(i, { name: e.target.value })} />
+                  <input aria-label="Price per room" type="number" className="rounded-xl border p-2 text-sm" value={t.pricePerRoom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => editRoomType(i, { pricePerRoom: Number(e.target.value) || 0 })} />
+                  <button className="text-sm rounded-xl border px-2 py-1" onClick={() => removeRoomType(i)}>Remove</button>
+                </div>
+              ))}
+              <button className="text-sm rounded-xl border px-2 py-1" onClick={addRoomType}>+ Add room type</button>
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl border p-4 shadow-sm space-y-2">
@@ -458,6 +670,9 @@ function ServiceBuilderV2() {
           <select aria-label="Preview Frequency" className="rounded-xl border px-3 py-2 text-sm" value={previewFreq} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPreviewFreq(e.target.value)}>
             {svc.config.frequencyOptions.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
           </select>
+          <label className="text-sm ml-3">Area</label>
+          <input aria-label="Preview Area" type="number" className="w-24 rounded-xl border px-3 py-2 text-sm" value={previewArea}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPreviewArea(Number(e.target.value) || 0)} />
           <span className="text-sm text-neutral-500">Toggle add-ons/modifiers to include them in Preview:</span>
         </div>
         <div className="flex flex-wrap gap-2">
