@@ -50,13 +50,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (typeof input.active !== "undefined") fields.active = input.active;
   if (typeof input.config !== "undefined") {
     // Scrub any legacy zip fields from config before persisting
-    const cfg = { ...(input.config as Record<string, unknown>) };
-    delete (cfg as any).zip;
-    delete (cfg as any).zipAllowlist;
-    delete (cfg as any).zipRules;
-    fields.vat_rate = (cfg as any).vatRate;
-    fields.rut_eligible = (cfg as any).rutEligible;
-    fields.model = (cfg as any).model;
+    const cfg: Record<string, unknown> = { ...(input.config as Record<string, unknown>) };
+    delete cfg["zip"]; delete cfg["zipAllowlist"]; delete cfg["zipRules"];
+    fields.vat_rate = (cfg["vatRate"] as number | undefined);
+    fields.rut_eligible = (cfg["rutEligible"] as boolean | undefined);
+    fields.model = (cfg["model"] as string | undefined);
     fields.config = cfg;
   }
   if (Object.keys(fields).length === 0) {
