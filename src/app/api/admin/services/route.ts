@@ -33,6 +33,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "INVALID_REQUEST", issues: parsed.error.flatten() }, { status: 400 });
   }
   const input = parsed.data;
+  // Scrub any legacy zip fields from config
+  if (input.config && typeof input.config === "object") {
+    // @ts-expect-error scrub legacy
+    delete (input.config as any).zip;
+    // @ts-expect-error scrub legacy
+    delete (input.config as any).zipAllowlist;
+    // @ts-expect-error scrub legacy
+    delete (input.config as any).zipRules;
+  }
   const slug = input.slug ?? slugify(input.name);
 
   const sb = supabaseAdmin();

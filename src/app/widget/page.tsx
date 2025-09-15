@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { validateZip as validateZipCentral } from "@/lib/zip";
 
 // Minimal shapes to keep this page self-contained and strictly typed
 // Matches our v2.1 public APIs (services list, quote, bookings)
@@ -86,7 +87,7 @@ interface BookingResponse { id: string; status: string; currency: string; total_
 // Helpers
 const currencyMinorToMajor = (minor: number, ccy = "SEK") => new Intl.NumberFormat("sv-SE", { style: "currency", currency: ccy }).format((minor ?? 0) / 100);
 
-const validateZip = (zip: string) => /^\d{5}$/.test(zip.trim());
+const validateZipLocal = (zip: string) => /^\d{5}$/.test(zip.trim());
 
 function genIdemKey(prefix = "ui"): string { return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 
@@ -278,10 +279,15 @@ export default function WidgetPage() {
           </Field>
           <button
             className="px-4 py-2 rounded-xl bg-black text-white disabled:opacity-50"
-            disabled={!validateZip(zip)}
-            onClick={() => { setZipOk(true); setStep(2); }}
+            disabled={!validateZipLocal(zip)}
+            onClick={() => {
+              // Centralized gate (permissive until forms are wired)
+              const ok = validateZipCentral(zip, undefined);
+              if (!ok) return;
+              setZipOk(true); setStep(2);
+            }}
           >Continue</button>
-          <div className="text-sm ml-2">{zip && (validateZip(zip) ? "✓ looks good" : "✕ invalid")}</div>
+          <div className="text-sm ml-2">{zip && (validateZipLocal(zip) ? "✓ looks good" : "✕ invalid")}</div>
       </div>
       </Section>
 

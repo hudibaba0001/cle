@@ -49,10 +49,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (typeof input.slug !== "undefined") fields.slug = input.slug;
   if (typeof input.active !== "undefined") fields.active = input.active;
   if (typeof input.config !== "undefined") {
-    fields.vat_rate = input.config.vatRate;
-    fields.rut_eligible = input.config.rutEligible;
-    fields.model = input.config.model;
-    fields.config = input.config;
+    // Scrub any legacy zip fields from config before persisting
+    const cfg = { ...(input.config as Record<string, unknown>) };
+    delete (cfg as any).zip;
+    delete (cfg as any).zipAllowlist;
+    delete (cfg as any).zipRules;
+    fields.vat_rate = (cfg as any).vatRate;
+    fields.rut_eligible = (cfg as any).rutEligible;
+    fields.model = (cfg as any).model;
+    fields.config = cfg;
   }
   if (Object.keys(fields).length === 0) {
     return NextResponse.json({ error: "NO_FIELDS" }, { status: 400 });
