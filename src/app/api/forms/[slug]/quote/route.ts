@@ -12,7 +12,7 @@ const Body = z.object({
   currency: z.string().default("SEK"),
   rut: z.boolean().default(true),
   frequency: z.string(),
-  answers: z.record(z.unknown()).default({}),
+  answers: z.record(z.string(), z.unknown()).default({}),
 });
 
 function matchesZip(zip: string, pattern: string) {
