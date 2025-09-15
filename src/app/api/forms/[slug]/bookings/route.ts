@@ -10,9 +10,9 @@ const Body = z.object({
   zip: z.string().min(3),
   service_id: z.string().uuid(),
   customer: z.object({}).passthrough(),
-  fields: z.record(z.unknown()).default({}),
+  fields: z.record(z.string(), z.unknown()).default({}),
   frequency: z.string().optional(),
-  answers: z.record(z.unknown()).default({}),
+  answers: z.record(z.string(), z.unknown()).default({}),
   currency: z.string().default("SEK"),
   rut: z.boolean().default(true),
 });
