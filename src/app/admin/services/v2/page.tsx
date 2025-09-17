@@ -472,6 +472,49 @@ function ServiceBuilderV2() {
     up({ config: { ...svc.config, per_room: { roomTypes } } });
   }
 
+  // hourly_area (builder uses map max->hours; compute mins on the fly)
+  function getHourlyRows(): Array<{ min: number; max: number; hours: number }> {
+    const entries = Object.entries(svc.config.areaToHours ?? { "50": 3 })
+      .map(([max, hours]) => ({ max: Number(max) || 0, hours: Number(hours) || 0 }))
+      .filter((e) => e.max > 0)
+      .sort((a, b) => a.max - b.max);
+    const rows: Array<{ min: number; max: number; hours: number }> = [];
+    let prevMax = 0;
+    for (const e of entries) {
+      rows.push({ min: prevMax, max: e.max, hours: e.hours });
+      prevMax = e.max;
+    }
+    if (rows.length === 0) rows.push({ min: 0, max: 50, hours: 3 });
+    return rows;
+  }
+  function setHourlyRows(rows: Array<{ min: number; max: number; hours: number }>) {
+    const sorted = [...rows].sort((a, b) => a.max - b.max);
+    const map: Record<string, number> = {};
+    for (const r of sorted) {
+      if (r.max > 0 && r.hours > 0) map[String(r.max)] = r.hours;
+    }
+    up({ config: { ...svc.config, areaToHours: map } });
+  }
+  function addHourlyRow() {
+    const rows = getHourlyRows();
+    const last = rows[rows.length - 1];
+    const next: Array<{ min: number; max: number; hours: number }> = [
+      ...rows,
+      { min: last?.max ?? 0, max: (last?.max ?? 0) + 50, hours: last?.hours ?? 3 },
+    ];
+    setHourlyRows(next);
+  }
+  function editHourlyRow(index: number, patch: Partial<{ max: number; hours: number }>) {
+    const rows = getHourlyRows();
+    const next = rows.map((r, i) => (i === index ? { ...r, ...patch } : r));
+    setHourlyRows(next);
+  }
+  function removeHourlyRow(index: number) {
+    const rows = getHourlyRows();
+    const next = rows.filter((_, i) => i !== index);
+    setHourlyRows(next.length ? next : [{ min: 0, max: 50, hours: 3 }]);
+  }
+
   return (
     <Suspense fallback={<div className="p-6">Loading…</div>}>
     <div className="mx-auto max-w-6xl p-6 space-y-6">
@@ -503,16 +546,49 @@ function ServiceBuilderV2() {
           </select>
 
           {svc.model === "hourly" && (
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-sm">Hourly rate</label>
-                <input aria-label="Hourly rate" type="number" className="w-full rounded-xl border p-2 text-sm" value={svc.config.hourlyRate ?? 1100}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => up({ config: { ...svc.config, hourlyRate: Number(e.target.value) || 0 } })} />
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-sm">Hourly rate</label>
+                  <input aria-label="Hourly rate" type="number" className="w-full rounded-xl border p-2 text-sm" value={svc.config.hourlyRate ?? 1100}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => up({ config: { ...svc.config, hourlyRate: Number(e.target.value) || 0 } })} />
+                </div>
               </div>
-              <div>
-                <label className="text-sm">Area→Hours (JSON)</label>
-                <input aria-label="Area to Hours JSON" className="w-full rounded-xl border p-2 text-sm" value={JSON.stringify(svc.config.areaToHours ?? { "50": 3 })}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => { try { up({ config: { ...svc.config, areaToHours: JSON.parse(e.target.value) } }); } catch {} }} />
+              <div className="space-y-2">
+                <label className="text-sm">Area tiers (m² → hours)</label>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-neutral-500">
+                        <th className="py-1 pr-2">Min m²</th>
+                        <th className="py-1 pr-2">Max m²</th>
+                        <th className="py-1 pr-2">Hours</th>
+                        <th className="py-1" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getHourlyRows().map((r, i) => (
+                        <tr key={i} className="border-t">
+                          <td className="py-2 pr-2">
+                            <input aria-label="Min sqm" type="number" className="w-24 rounded-xl border p-2 text-sm" value={r.min} disabled />
+                          </td>
+                          <td className="py-2 pr-2">
+                            <input aria-label="Max sqm" type="number" className="w-24 rounded-xl border p-2 text-sm" value={r.max}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => editHourlyRow(i, { max: Number(e.target.value) || 0 })} />
+                          </td>
+                          <td className="py-2 pr-2">
+                            <input aria-label="Hours" type="number" step={0.5} className="w-20 rounded-xl border p-2 text-sm" value={r.hours}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => editHourlyRow(i, { hours: Number(e.target.value) || 0 })} />
+                          </td>
+                          <td className="py-2">
+                            <button className="text-sm rounded-xl border px-2 py-1" onClick={() => removeHourlyRow(i)}>Remove</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <button className="text-sm rounded-xl border px-2 py-1" onClick={addHourlyRow}>+ Add tier</button>
               </div>
             </div>
           )}
