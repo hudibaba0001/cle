@@ -112,7 +112,12 @@ function FormBuilder() {
       }
       return form.id ?? null;
     } catch (e: unknown) {
-      setError((e as Error).message || "SAVE_FAILED");
+      const er = e as { message?: string; status?: number; detail?: string };
+      if (er?.status === 409 || /duplicate|unique/i.test(er?.detail || "")) {
+        setError("SLUG_CONFLICT: That slug is already in use. Choose another slug.");
+      } else {
+        setError(er?.message || "SAVE_FAILED");
+      }
       return null;
     } finally {
       setSaving(false);
@@ -269,7 +274,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 async function toErr(res: Response) {
   const j = await res.json().catch(()=>({} as Record<string, unknown>));
-  throw new Error((j as Record<string, unknown>)?.error as string || (j as Record<string, unknown>)?.code as string || `HTTP_${res.status}`);
+  const msg = (j as Record<string, unknown>)?.error as string || (j as Record<string, unknown>)?.code as string || `HTTP_${res.status}`;
+  const err = new Error(msg) as Error & { status?: number; detail?: string };
+  err.status = res.status;
+  err.detail = (j as Record<string, unknown>)?.detail as string | undefined;
+  throw err;
 }
 function rand() { return Math.random().toString(36).slice(2,6); }
 
