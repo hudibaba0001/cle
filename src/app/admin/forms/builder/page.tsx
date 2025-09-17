@@ -228,7 +228,7 @@ function FormBuilder() {
         </div>
         <div className="flex items-center gap-2">
           <input aria-label="Tenant ID" placeholder="Tenant ID (required)" title="Tenant ID" className="rounded-xl border px-3 py-2 text-sm" value={tenantId} onChange={(e)=>setTenantId(e.target.value)} />
-          <button onClick={saveDraft} disabled={saving || !tenantId} className="rounded-xl border px-3 py-2 text-sm hover:bg-neutral-50 disabled:opacity-50">{saving ? "Saving…" : "Save Draft"}</button>
+          <button onClick={()=>{ void saveDraft(); }} disabled={saving || !tenantId} className="rounded-xl border px-3 py-2 text-sm hover:bg-neutral-50 disabled:opacity-50">{saving ? "Saving…" : "Save Draft"}</button>
           <button onClick={publish} disabled={publishing || !tenantId} className="rounded-xl bg-blue-600 text-white px-3 py-2 text-sm hover:bg-blue-700 disabled:opacity-50">{publishing ? "Publishing…" : "Publish"}</button>
         </div>
       </div>
@@ -286,7 +286,7 @@ function FormBuilder() {
                   <label key={s.id} className="flex items-center gap-2 rounded-xl border p-3 text-sm">
                     <input type="checkbox" checked={checked} onChange={(e)=>{
                       const ids = new Set(form.definition.services.ids);
-                      e.target.checked ? ids.add(s.id) : ids.delete(s.id);
+                      if (e.target.checked) { ids.add(s.id); } else { ids.delete(s.id); }
                       setDef({ services: { ids: Array.from(ids) } });
                     }} />
                     <span className="font-medium">{s.name}</span>
