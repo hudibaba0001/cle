@@ -53,6 +53,9 @@ function FormBuilder() {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string|null>(null);
+  const [slugConflict, setSlugConflict] = useState(false);
+  const [slugSuggestions, setSlugSuggestions] = useState<string[]>([]);
+  const [knownSlugs, setKnownSlugs] = useState<string[]>([]);
 
   const [form, setForm] = useState<DraftForm>({
     id: idFromQuery,
@@ -91,14 +94,65 @@ function FormBuilder() {
   const update = (patch: Partial<DraftForm>) => setForm((p) => ({ ...p, ...patch, definition: { ...p.definition, ...(patch as { definition?: FormDefinition }).definition } }));
   const setDef = (patch: Partial<FormDefinition>) => setForm((p) => ({ ...p, definition: { ...p.definition, ...patch } }));
 
-  async function saveDraft(): Promise<string | null> {
+  function slugify(s: string) {
+    return s
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .replace(/--+/g, "-");
+  }
+
+  function suggestSlug(base: string, existing: Set<string>) {
+    const out: string[] = [];
+    const b = slugify(base || "form");
+    const today = new Date();
+    const ymd = today.toISOString().slice(0, 10).replace(/-/g, "");
+    const pool = [
+      b,
+      `${b}-2`, `${b}-3`, `${b}-4`,
+      `${b}-north`, `${b}-south`,
+      `${b}-${ymd}`,
+      `${b}-${Math.random().toString(36).slice(2, 6)}`,
+    ];
+    for (const s of pool) if (s && !existing.has(s)) out.push(s);
+    let i = 5;
+    while (out.length < 6 && i < 35) {
+      const s = `${b}-${i++}`;
+      if (!existing.has(s)) out.push(s);
+    }
+    return Array.from(new Set(out)).slice(0, 6);
+  }
+
+  async function fetchExistingSlugs(): Promise<string[]> {
+    try {
+      const res = await fetch("/api/admin/forms", { headers: { "x-tenant-id": tenantId }, cache: "no-store" });
+      if (!res.ok) return [];
+      const j = await res.json().catch(()=>({} as Record<string, unknown>));
+      const items = Array.isArray((j as any)?.items) ? (j as any).items : Array.isArray(j) ? j as any[] : [];
+      return items.map((it: any) => String(it?.slug || "")).filter(Boolean);
+    } catch { return []; }
+  }
+
+  async function saveDraft(override?: Partial<DraftForm>): Promise<string | null> {
     setError(null);
     if (!tenantId) { setError("TENANT_ID_REQUIRED"); return null; }
     setSaving(true);
     try {
-      const body = JSON.stringify({ name: form.name, slug: form.slug, definition: form.definition });
+      const payload = {
+        name: override?.name ?? form.name,
+        slug: slugify(override?.slug ?? form.slug),
+        definition: override?.definition ?? form.definition,
+      };
+      const body = JSON.stringify(payload);
       if (!form.id) {
         const res = await fetch("/api/admin/forms", { method: "POST", headers: { "Content-Type": "application/json", "x-tenant-id": tenantId }, body });
+        if (res.status === 409) {
+          const slugs = await fetchExistingSlugs();
+          setKnownSlugs(slugs);
+          setSlugSuggestions(suggestSlug(payload.slug, new Set(slugs)));
+          setSlugConflict(true);
+          throw await toErr(res); // still surface the error message
+        }
         if (!res.ok) throw await toErr(res);
         const j = await res.json();
         const id = j?.id as string | undefined;
@@ -110,11 +164,12 @@ function FormBuilder() {
         const res = await fetch(`/api/admin/forms/${form.id}`, { method: "PUT", headers: { "Content-Type": "application/json", "x-tenant-id": tenantId }, body });
         if (!res.ok) throw await toErr(res);
       }
+      setSlugConflict(false); setSlugSuggestions([]);
       return form.id ?? null;
     } catch (e: unknown) {
       const er = e as { message?: string; status?: number; detail?: string };
       if (er?.status === 409 || /duplicate|unique/i.test(er?.detail || "")) {
-        setError("SLUG_CONFLICT: That slug is already in use. Choose another slug.");
+        setError("SLUG_CONFLICT: That slug is already in use. Choose a suggestion below.");
       } else {
         setError(er?.message || "SAVE_FAILED");
       }
@@ -122,6 +177,11 @@ function FormBuilder() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function applySuggestedSlug(s: string) {
+    update({ slug: s });
+    await saveDraft({ slug: s });
   }
 
   async function publish() {
@@ -175,8 +235,24 @@ function FormBuilder() {
         <Card title="Basics" subtitle="Name and slug identify your embeddable form">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Field label="Form name"><input className="w-full rounded-xl border p-2 text-sm" value={form.name} onChange={(e)=>update({ name: e.target.value })} placeholder="City North" title="Form name"/></Field>
-            <Field label="Slug (lowercase-hyphen)"><input className="w-full rounded-xl border p-2 text-sm" value={form.slug} onChange={(e)=>update({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,"") })} placeholder="city-north" title="Slug"/></Field>
+            <Field label="Slug (lowercase-hyphen)"><input className="w-full rounded-xl border p-2 text-sm" value={form.slug} onChange={(e)=>update({ slug: slugify(e.target.value) })} placeholder="city-north" title="Slug"/></Field>
           </div>
+          {slugConflict && (
+            <div className="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3">
+              <div className="text-sm font-medium">Slug already taken for this tenant.</div>
+              <div className="mt-2 text-sm">Try one of these:</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {slugSuggestions.map((s) => (
+                  <button key={s} onClick={()=>applySuggestedSlug(s)} className="rounded-full border px-3 py-1 text-sm hover:bg-white">
+                    {s}
+                  </button>
+                ))}
+              </div>
+              {knownSlugs.length>0 && (
+                <div className="mt-2 text-xs text-neutral-500">Existing: {knownSlugs.slice(0,6).join(", ")}{knownSlugs.length>6?"…":""}</div>
+              )}
+            </div>
+          )}
         </Card>
       )}
 
