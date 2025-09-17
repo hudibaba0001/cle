@@ -127,9 +127,19 @@ function FormBuilder() {
     try {
       const res = await fetch("/api/admin/forms", { headers: { "x-tenant-id": tenantId }, cache: "no-store" });
       if (!res.ok) return [];
-      const j = await res.json().catch(()=>({} as Record<string, unknown>));
-      const items = Array.isArray((j as any)?.items) ? (j as any).items : Array.isArray(j) ? j as any[] : [];
-      return items.map((it: any) => String(it?.slug || "")).filter(Boolean);
+      const j: unknown = await res.json().catch(()=>({} as unknown));
+      type Row = { slug: string };
+      function isRow(v: unknown): v is Row {
+        return typeof v === "object" && v !== null && typeof (v as { slug?: unknown }).slug === "string";
+      }
+      let rows: Row[] = [];
+      if (Array.isArray(j)) {
+        rows = (j as unknown[]).filter(isRow);
+      } else if (typeof j === "object" && j && "items" in (j as Record<string, unknown>)) {
+        const items = (j as { items?: unknown }).items;
+        rows = Array.isArray(items) ? (items as unknown[]).filter(isRow) : [];
+      }
+      return rows.map((r) => r.slug).filter(Boolean);
     } catch { return []; }
   }
 
@@ -248,9 +258,9 @@ function FormBuilder() {
                   </button>
                 ))}
               </div>
-              {knownSlugs.length>0 && (
+              {knownSlugs.length>0 ? (
                 <div className="mt-2 text-xs text-neutral-500">Existing: {knownSlugs.slice(0,6).join(", ")}{knownSlugs.length>6?"…":""}</div>
-              )}
+              ) : null}
             </div>
           )}
         </Card>
