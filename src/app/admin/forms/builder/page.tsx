@@ -44,6 +44,7 @@ type DraftForm = {
 function FormBuilder() {
   const sp = useSearchParams();
   const idFromQuery = sp.get("id") || undefined;
+  const slugFromQuery = sp.get("slug") || undefined;
 
   const [tenantId, setTenantId] = useState<string>("demo-tenant");
   const [services, setServices] = useState<ServiceRow[]>([]);
@@ -90,6 +91,36 @@ function FormBuilder() {
     };
     load();
   }, [tenantId]);
+
+  // Load existing form by slug (if provided), set id for PUT, and try to prefill definition for published forms
+  useEffect(() => {
+    const loadBySlug = async () => {
+      if (!tenantId || !slugFromQuery) return;
+      try {
+        const listRes = await fetch(`/api/admin/forms`, { headers: { "x-tenant-id": tenantId }, cache: "no-store" });
+        if (listRes.ok) {
+          const jj: unknown = await listRes.json();
+          const items = Array.isArray((jj as any)?.items) ? (jj as any).items : Array.isArray(jj) ? (jj as any) : [];
+          const match = (items as Array<any>).find((it) => it?.slug === slugFromQuery);
+          if (match?.id) {
+            update({ id: match.id, name: match.name ?? form.name, slug: match.slug ?? slugFromQuery, status: match.status });
+          }
+        }
+        // If published, fetch public definition snapshot for prefill
+        const pubRes = await fetch(`/api/forms/${encodeURIComponent(slugFromQuery)}`, { headers: { "x-tenant-id": tenantId }, cache: "no-store" });
+        if (pubRes.ok) {
+          const pub = await pubRes.json();
+          if (pub?.definition) {
+            setDef(pub.definition as FormDefinition);
+          }
+        }
+      } catch {
+        // ignore; remain in create mode
+      }
+    };
+    void loadBySlug();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slugFromQuery, tenantId]);
 
   const update = (patch: Partial<DraftForm>) => setForm((p) => ({ ...p, ...patch, definition: { ...p.definition, ...(patch as { definition?: FormDefinition }).definition } }));
   const setDef = (patch: Partial<FormDefinition>) => setForm((p) => ({ ...p, definition: { ...p.definition, ...patch } }));
