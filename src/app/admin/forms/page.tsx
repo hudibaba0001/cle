@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +14,7 @@ export default function BookingForms() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  useEffect(() => { void load(); }, [tenantId]);
-
-  async function load() {
+  const load = useCallback(async () => {
     setError(null);
     if (!tenantId) return;
     setLoading(true);
@@ -39,7 +37,9 @@ export default function BookingForms() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [tenantId]);
+
+  useEffect(() => { void load(); }, [load]);
 
   const sorted = useMemo(() => {
     return [...rows].sort((a, b) => Date.parse(b.updated_at ?? "") - Date.parse(a.updated_at ?? ""));

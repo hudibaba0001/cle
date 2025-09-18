@@ -100,9 +100,19 @@ function FormBuilder() {
         const listRes = await fetch(`/api/admin/forms`, { headers: { "x-tenant-id": tenantId }, cache: "no-store" });
         if (listRes.ok) {
           const jj: unknown = await listRes.json();
-          const items = Array.isArray((jj as any)?.items) ? (jj as any).items : Array.isArray(jj) ? (jj as any) : [];
-          const match = (items as Array<any>).find((it) => it?.slug === slugFromQuery);
-          if (match?.id) {
+          type Row = { id: string; slug: string; name?: string; status?: "draft" | "published" };
+          function isRow(v: unknown): v is Row {
+            return typeof v === "object" && v !== null && typeof (v as { id?: unknown }).id === "string" && typeof (v as { slug?: unknown }).slug === "string";
+          }
+          let items: Row[] = [];
+          if (Array.isArray(jj)) {
+            items = (jj as unknown[]).filter(isRow) as Row[];
+          } else if (typeof jj === "object" && jj && "items" in (jj as Record<string, unknown>)) {
+            const arr = (jj as { items?: unknown }).items;
+            items = Array.isArray(arr) ? (arr as unknown[]).filter(isRow) as Row[] : [];
+          }
+          const match = items.find((it) => it.slug === slugFromQuery);
+          if (match && match.id) {
             update({ id: match.id, name: match.name ?? form.name, slug: match.slug ?? slugFromQuery, status: match.status });
           }
         }
