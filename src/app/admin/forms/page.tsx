@@ -12,6 +12,7 @@ export default function BookingForms() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => { void load(); }, [tenantId]);
 
@@ -43,6 +44,34 @@ export default function BookingForms() {
   const sorted = useMemo(() => {
     return [...rows].sort((a, b) => Date.parse(b.updated_at ?? "") - Date.parse(a.updated_at ?? ""));
   }, [rows]);
+
+  async function publish(row: Row) {
+    if (!tenantId) return;
+    setBusyId(row.id);
+    try {
+      const res = await fetch(`/api/admin/forms/${row.id}/publish`, { method: "POST", headers: { "x-tenant-id": tenantId } });
+      if (!res.ok) throw new Error(`HTTP_${res.status}`);
+      await load();
+    } catch (e) {
+      setError((e as Error).message || "PUBLISH_FAILED");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function unpublish(row: Row) {
+    if (!tenantId) return;
+    setBusyId(row.id);
+    try {
+      const res = await fetch(`/api/admin/forms/${row.id}`, { method: "PUT", headers: { "x-tenant-id": tenantId, "content-type": "application/json" }, body: JSON.stringify({ status: "draft" }) });
+      if (!res.ok) throw new Error(`HTTP_${res.status}`);
+      await load();
+    } catch (e) {
+      setError((e as Error).message || "UNPUBLISH_FAILED");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -85,7 +114,12 @@ export default function BookingForms() {
                 </td>
                 <td className="py-2 px-3">{r.updated_at ? new Date(r.updated_at).toLocaleString() : ""}</td>
                 <td className="py-2 px-3 text-right">
-                  <Link href={`/admin/forms/builder?id=${r.id}`} className="rounded-xl border px-2 py-1 hover:bg-neutral-50">Edit</Link>
+                  <Link href={`/admin/forms/builder?slug=${encodeURIComponent(r.slug)}`} className="rounded-xl border px-2 py-1 hover:bg-neutral-50">Edit</Link>
+                  {r.status === "published" ? (
+                    <button disabled={busyId===r.id} onClick={()=>unpublish(r)} className="ml-2 rounded-xl border px-2 py-1 hover:bg-neutral-50">Unpublish</button>
+                  ) : (
+                    <button disabled={busyId===r.id} onClick={()=>publish(r)} className="ml-2 rounded-xl border px-2 py-1 hover:bg-neutral-50">Publish</button>
+                  )}
                 </td>
               </tr>
             ))}
