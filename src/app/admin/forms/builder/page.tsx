@@ -105,7 +105,12 @@ function FormBuilder() {
           function isRow(v: unknown): v is Row {
             return typeof v === "object" && v !== null && typeof (v as { id?: unknown }).id === "string" && typeof (v as { slug?: unknown }).slug === "string";
           }
-          const items: Row[] = Array.isArray((jj as any)?.items) ? ((jj as any).items as unknown[]).filter(isRow) as Row[] : [];
+          const itemsRaw: unknown = Array.isArray(jj)
+            ? jj
+            : (typeof jj === "object" && jj !== null && "items" in (jj as Record<string, unknown>))
+              ? (jj as { items?: unknown }).items
+              : [];
+          const items: Row[] = Array.isArray(itemsRaw) ? (itemsRaw as unknown[]).filter(isRow) : [];
           const match = items.find((it) => it.slug === slugFromQuery);
           if (match && match.id) {
             update({ id: match.id, name: match.name ?? form.name, slug: match.slug ?? slugFromQuery, status: match.status });
