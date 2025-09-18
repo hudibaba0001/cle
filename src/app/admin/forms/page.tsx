@@ -114,7 +114,7 @@ export default function BookingForms() {
                 </td>
                 <td className="py-2 px-3">{r.updated_at ? new Date(r.updated_at).toLocaleString() : ""}</td>
                 <td className="py-2 px-3 text-right">
-                  <Link href={`/admin/forms/builder?slug=${encodeURIComponent(r.slug)}`} className="rounded-xl border px-2 py-1 hover:bg-neutral-50">Edit</Link>
+                  <Link href={`/admin/forms/builder?slug=${encodeURIComponent(r.slug)}&tenant=${encodeURIComponent(tenantId)}`} className="rounded-xl border px-2 py-1 hover:bg-neutral-50">Edit</Link>
                   {r.status === "published" ? (
                     <button disabled={busyId===r.id} onClick={()=>unpublish(r)} className="ml-2 rounded-xl border px-2 py-1 hover:bg-neutral-50">Unpublish</button>
                   ) : (
